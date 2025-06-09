@@ -26,7 +26,7 @@ function getAvatarUrl(path) {
   // If path is already a full URL, return it directly
   if (path.startsWith('http')) return path;
   // Otherwise construct from storage
-  return `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/avatars/${path}`;
+  return `${import.meta.env.SUPABASE_URL}/storage/v1/object/public/avatars/${path}`;
 }
 
 export default function UserDetails() {
