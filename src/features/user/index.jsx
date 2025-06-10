@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import toast from "react-hot-toast";
 import { Loader } from "@/components/shared/loader";
 import { PasswordChangeForm } from "./PasswordChangeForm";
+import { useAuth } from "@/context/AuthContext";
 
 // Create User Context
 export const UserContext = createContext();
@@ -87,6 +88,7 @@ function getAvatarUrl(path) {
 
 export default function UserDetails() {
   const { user: globalUser, updateUser } = useUser();
+  const { updateUserDetails } = useAuth();
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -227,7 +229,8 @@ export default function UserDetails() {
       }
 
       setUser(updatedUser);
-      updateUser(updatedUser); // Update global user state
+      updateUser(updatedUser); // Update UserContext
+      updateUserDetails(updatedUser); // Update AuthContext
       toast.success("Avatar updated successfully", { id: loadingToast });
     } catch (err) {
       console.error("Avatar update error:", err);
@@ -349,7 +352,8 @@ export default function UserDetails() {
       }
 
       setUser(freshUserData);
-      updateUser(freshUserData); // Update global user state
+      updateUser(freshUserData); // Update UserContext
+      updateUserDetails(freshUserData); // Update AuthContext
       setFormData({
         name: freshUserData.name || "",
         email: freshUserData.email || "",

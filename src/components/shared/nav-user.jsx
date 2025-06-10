@@ -1,4 +1,4 @@
-import { useUser } from "@/features/user";
+import { useAuth } from "@/context/AuthContext";
 import {
   IconCreditCard,
   IconDotsVertical,
@@ -37,13 +37,12 @@ function getAvatarUrl(path) {
 
 export function NavUser() {
   const { isMobile } = useSidebar()
-  const { user, updateUser, loading } = useUser()
+  const { userDetails, logout } = useAuth()
   const navigate = useNavigate()
 
   const handleLogout = async () => {
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
+      await logout()
       navigate("/login")
     } catch (error) {
       console.error('Error signing out:', error.message)
@@ -54,27 +53,11 @@ export function NavUser() {
     navigate("/account")
   }
 
-  if (loading) {
-    return (
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton size="lg">
-            <div className="h-8 w-8 rounded-lg animate-pulse bg-muted" />
-            <div className="grid flex-1 gap-1">
-              <div className="h-4 w-24 animate-pulse rounded bg-muted" />
-              <div className="h-3 w-32 animate-pulse rounded bg-muted" />
-            </div>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    );
-  }
+  if (!userDetails) return null;
 
-  if (!user) return null;
-
-  const initials = user.name
-    ? user.name.split(" ").map(n => n[0]).join("")
-    : user.email?.[0]?.toUpperCase() || "U"
+  const initials = userDetails.name
+    ? userDetails.name.split(" ").map(n => n[0]).join("")
+    : userDetails.email?.[0]?.toUpperCase() || "U"
 
   return (
     <SidebarMenu>
@@ -84,16 +67,16 @@ export function NavUser() {
             <SidebarMenuButton size="lg">
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage
-                  src={getAvatarUrl(user.avatar_url)}
-                  alt={user.name || user.email}
+                  src={getAvatarUrl(userDetails.avatar_url)}
+                  alt={userDetails.name || userDetails.email}
                   className="object-cover"
                 />
                 <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user.name || user.email}</span>
+                <span className="truncate font-medium">{userDetails.name || userDetails.email}</span>
                 <span className="text-muted-foreground truncate text-xs">
-                  {user.email}
+                  {userDetails.email}
                 </span>
               </div>
               <IconDotsVertical className="ml-auto size-4" />
@@ -108,16 +91,16 @@ export function NavUser() {
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage
-                    src={getAvatarUrl(user.avatar_url)}
-                    alt={user.name}
+                    src={getAvatarUrl(userDetails.avatar_url)}
+                    alt={userDetails.name}
                     className="object-cover"
                   />
                   <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{user.name || user.email}</span>
+                  <span className="truncate font-medium">{userDetails.name || userDetails.email}</span>
                   <span className="text-muted-foreground truncate text-xs">
-                    {user.email}
+                    {userDetails.email}
                   </span>
                 </div>
               </div>
@@ -138,10 +121,10 @@ export function NavUser() {
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            {user.role === 'admin' && (
+            {userDetails.role === 'admin' && (
               <>
                 <div className="px-3 py-1 text-xs text-muted-foreground">
-                  Role: <span className="font-medium text-primary">{user.role}</span>
+                  Role: <span className="font-medium text-primary">{userDetails.role}</span>
                 </div>
                 <DropdownMenuSeparator />
               </>

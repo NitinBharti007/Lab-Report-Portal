@@ -54,6 +54,10 @@ export const AuthProvider = ({ children }) => {
     fetchUserDetails();
   }, [user?.id]);
 
+  const updateUserDetails = (newDetails) => {
+    setUserDetails(prev => ({ ...prev, ...newDetails }));
+  };
+
   const login = async (email, password) => {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -87,7 +91,14 @@ export const AuthProvider = ({ children }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, user, userDetails, login, logout }}>
+    <AuthContext.Provider value={{ 
+      isAuthenticated, 
+      user, 
+      userDetails, 
+      login, 
+      logout,
+      updateUserDetails 
+    }}>
       {children}
     </AuthContext.Provider>
   );
