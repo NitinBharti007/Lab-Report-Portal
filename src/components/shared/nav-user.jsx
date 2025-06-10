@@ -37,7 +37,7 @@ function getAvatarUrl(path) {
 
 export function NavUser() {
   const { isMobile } = useSidebar()
-  const { user, updateUser } = useUser()
+  const { user, updateUser, loading } = useUser()
   const navigate = useNavigate()
 
   const handleLogout = async () => {
@@ -52,6 +52,22 @@ export function NavUser() {
 
   const handleAccountClick = () => {
     navigate("/account")
+  }
+
+  if (loading) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton size="lg">
+            <div className="h-8 w-8 rounded-lg animate-pulse bg-muted" />
+            <div className="grid flex-1 gap-1">
+              <div className="h-4 w-24 animate-pulse rounded bg-muted" />
+              <div className="h-3 w-32 animate-pulse rounded bg-muted" />
+            </div>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    );
   }
 
   if (!user) return null;
