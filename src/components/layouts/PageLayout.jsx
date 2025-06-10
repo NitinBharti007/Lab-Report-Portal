@@ -1,7 +1,6 @@
 import { AppSidebar } from "@/components/shared/app-sidebar"
 import { SiteHeader } from "@/components/shared/site-header"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { Toaster } from 'react-hot-toast'
 
 export default function PageLayout({ children }) {
   return (
@@ -17,7 +16,6 @@ export default function PageLayout({ children }) {
           </div>
         </div>
       </SidebarInset>
-      <Toaster position="top-right" />
     </SidebarProvider>
   )
 } 

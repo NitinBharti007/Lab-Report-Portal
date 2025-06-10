@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -21,9 +21,36 @@ export function ResetPasswordForm({
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const [isTokenValid, setIsTokenValid] = useState(false)
+  const [isValidReset, setIsValidReset] = useState(false)
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+
+  // Check if we're in a valid password reset state
+  useEffect(() => {
+    const checkResetState = async () => {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+        
+        if (sessionError) {
+          console.error('Session error:', sessionError)
+          throw sessionError
+        }
+
+        // If we have a session, we're in a valid reset state
+        if (session) {
+          console.log('Valid reset session:', session)
+          setIsValidReset(true)
+        } else {
+          console.log('No session found')
+          setError("Invalid or expired reset link. Please request a new one.")
+        }
+      } catch (error) {
+        console.error('Reset state check error:', error)
+        setError("Invalid or expired reset link. Please request a new one.")
+      }
+    }
+
+    checkResetState()
+  }, [])
 
   // Effect to clear error message after 3 seconds
   useEffect(() => {
@@ -35,38 +62,12 @@ export function ResetPasswordForm({
     }
   }, [error])
 
-  useEffect(() => {
-    const handleResetPassword = async () => {
-      try {
-        // Get the current session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-        
-        if (sessionError) {
-          console.error('Session error:', sessionError)
-          throw sessionError
-        }
-
-        // Check if we have a session (which means the reset link was valid)
-        if (session) {
-          setIsTokenValid(true)
-        } else {
-          setError("Invalid or expired reset link. Please request a new one.")
-        }
-      } catch (error) {
-        console.error('Reset password error:', error)
-        setError("Invalid or expired reset link. Please request a new one.")
-      }
-    }
-
-    handleResetPassword()
-  }, [])
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError("")
     setLoading(true)
 
-    if (!isTokenValid) {
+    if (!isValidReset) {
       setError("Please use a valid reset link")
       setLoading(false)
       return
@@ -100,7 +101,7 @@ export function ResetPasswordForm({
     }
   }
 
-  if (!isTokenValid && error) {
+  if (!isValidReset && error) {
     return (
       <div className={cn("flex flex-col gap-6", className)} {...props}>
         <Card>

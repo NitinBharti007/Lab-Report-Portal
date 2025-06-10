@@ -618,6 +618,39 @@ export default function ClinicDetails({
         throw updateError
       }
 
+      // Get the current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      if (sessionError) throw sessionError
+      if (!session) throw new Error('No active session')
+
+      // Call the invite-user function
+      try {
+        const response = await fetch('https://pxycafbswegyrxqiazsc.supabase.co/functions/v1/invite-user', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            email: contactData.email,
+            name: contactData.name,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error('❌ Error inviting user:', data);
+          throw new Error(data.error?.message || 'Failed to invite user');
+        }
+
+        console.log('✅ User invited successfully:', data);
+      } catch (inviteError) {
+        console.error('Error inviting user:', inviteError);
+        // Continue with contact addition even if invitation fails
+        toast.error('Contact added but invitation failed. Please try inviting manually.');
+      }
+
       // Update local state
       setClinic(prev => ({
         ...prev,

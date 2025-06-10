@@ -647,7 +647,6 @@ export default function Clinics() {
 
   return (
     <PageLayout>
-      <Toaster position="top-right" />
       {selectedClinic ? (
         <ClinicDetails
           clinic={selectedClinic}

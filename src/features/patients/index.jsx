@@ -458,7 +458,6 @@ export default function Patients() {
 
   return (
     <PageLayout>
-      <Toaster position="top-right" />
       <div className="container mx-auto py-2 px-2 sm:py-4 sm:px-4">
         <Card>
           {viewMode === "list" && (

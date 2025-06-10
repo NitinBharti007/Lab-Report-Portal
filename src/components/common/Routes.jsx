@@ -13,6 +13,7 @@ import UserDetails from "@/features/user";
 import NotFound from "@/pages/NotFound";
 import Unauthorized from "@/pages/Unauthorized";
 import { RoleProtectedRoute } from "./RoleProtectedRoute";
+import EmailVerificationCallback from "@/features/auth/EmailVerificationCallback";
 // import Team from "../../features/team";
 
 // Public Route component (redirects to dashboard if already logged in)
@@ -37,14 +38,16 @@ const AuthRoute = ({ children }) => {
   const { isAuthenticated } = useAuth();
   const location = useLocation();
 
-  // If user is authenticated, redirect to dashboard
-  if (isAuthenticated) {
-    return <Navigate to="/" replace />;
+  // Special handling for reset password route
+  if (location.pathname === '/reset-password') {
+    // Allow access to reset password page even if authenticated
+    // This is because Supabase creates a session when user clicks reset link
+    return children;
   }
 
-  // For reset password, check if there's a token in the URL
-  if (location.pathname === '/reset-password' && !location.search.includes('token=')) {
-    return <Navigate to="/login" replace />;
+  // For other auth routes (like forgot password), redirect to dashboard if authenticated
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
   }
 
   return children;
@@ -99,6 +102,12 @@ const AppRoutes = () => {
             <AuthRoute>
               <ResetPasswordPage />
             </AuthRoute>
+          }
+        />
+        <Route
+          path="/auth/callback"
+          element={
+            <EmailVerificationCallback />
           }
         />
 

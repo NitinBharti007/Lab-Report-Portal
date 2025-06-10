@@ -1,3 +1,4 @@
+import { useUser } from "@/features/user";
 import {
   IconCreditCard,
   IconDotsVertical,
@@ -26,25 +27,38 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { useAuth } from "@/context/AuthContext"
+import { supabase } from "@/lib/supabaseClient"
+
+function getAvatarUrl(path) {
+  if (!path) return null;
+  if (path.startsWith('http')) return path;
+  return `https://pxycafbswegyrxqiazsc.supabase.co/storage/v1/object/public/avatars/${path}`;
+}
 
 export function NavUser() {
   const { isMobile } = useSidebar()
-  const { logout, user, userDetails } = useAuth()
+  const { user, updateUser } = useUser()
   const navigate = useNavigate()
 
   const handleLogout = async () => {
-    await logout()
-    navigate("/login")
+    try {
+      const { error } = await supabase.auth.signOut()
+      if (error) throw error
+      navigate("/login")
+    } catch (error) {
+      console.error('Error signing out:', error.message)
+    }
   }
 
   const handleAccountClick = () => {
     navigate("/account")
   }
 
-  const initials = userDetails?.name
-    ? userDetails.name.split(" ").map(n => n[0]).join("")
-    : user?.email?.[0]?.toUpperCase() || "U"
+  if (!user) return null;
+
+  const initials = user.name
+    ? user.name.split(" ").map(n => n[0]).join("")
+    : user.email?.[0]?.toUpperCase() || "U"
 
   return (
     <SidebarMenu>
@@ -54,16 +68,16 @@ export function NavUser() {
             <SidebarMenuButton size="lg">
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage
-                  src={userDetails?.avatar_url || ""}
-                  alt={userDetails?.name || user?.email}
+                  src={getAvatarUrl(user.avatar_url)}
+                  alt={user.name || user.email}
                   className="object-cover"
                 />
                 <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{userDetails?.name || user?.email}</span>
+                <span className="truncate font-medium">{user.name || user.email}</span>
                 <span className="text-muted-foreground truncate text-xs">
-                  {user?.email}
+                  {user.email}
                 </span>
               </div>
               <IconDotsVertical className="ml-auto size-4" />
@@ -78,16 +92,16 @@ export function NavUser() {
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage
-                    src={userDetails?.avatar_url || ""}
-                    alt={userDetails?.name}
+                    src={getAvatarUrl(user.avatar_url)}
+                    alt={user.name}
                     className="object-cover"
                   />
                   <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{userDetails?.name || user?.email}</span>
+                  <span className="truncate font-medium">{user.name || user.email}</span>
                   <span className="text-muted-foreground truncate text-xs">
-                    {user?.email}
+                    {user.email}
                   </span>
                 </div>
               </div>
@@ -108,10 +122,10 @@ export function NavUser() {
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            {userDetails?.role === 'admin' && (
+            {user.role === 'admin' && (
               <>
                 <div className="px-3 py-1 text-xs text-muted-foreground">
-                  Role: <span className="font-medium text-primary">{userDetails.role}</span>
+                  Role: <span className="font-medium text-primary">{user.role}</span>
                 </div>
                 <DropdownMenuSeparator />
               </>
