@@ -1,4 +1,4 @@
-import { useEffect, useState, createContext, useContext } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -14,61 +14,6 @@ import toast from "react-hot-toast";
 import { Loader } from "@/components/shared/loader";
 import { PasswordChangeForm } from "./PasswordChangeForm";
 import { useAuth } from "@/context/AuthContext";
-
-// Create User Context
-export const UserContext = createContext();
-
-export function UserProvider({ children }) {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const updateUser = (newUserData) => {
-    setUser(newUserData);
-  };
-
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        const {
-          data: { user: authUser },
-          error: authError,
-        } = await supabase.auth.getUser();
-
-        if (authError || !authUser) throw authError;
-
-        const { data: userDetails, error: userError } = await supabase
-          .from("users")
-          .select("id, name, email, avatar_url, role, created_at")
-          .eq("user_id", authUser.id)
-          .single();
-
-        if (userError) throw userError;
-
-        setUser(userDetails);
-      } catch (err) {
-        console.error("Fetch error:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchUser();
-  }, []);
-
-  return (
-    <UserContext.Provider value={{ user, updateUser, loading }}>
-      {children}
-    </UserContext.Provider>
-  );
-}
-
-export function useUser() {
-  const context = useContext(UserContext);
-  if (context === undefined) {
-    throw new Error("useUser must be used within a UserProvider");
-  }
-  return context;
-}
 
 function generateUUID() {
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {

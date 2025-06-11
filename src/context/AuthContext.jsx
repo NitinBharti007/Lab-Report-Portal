@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { Loader } from '@/components/shared/loader';
+import { useNavigate } from 'react-router-dom';
 
 const AuthContext = createContext(null);
 
@@ -9,50 +10,73 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState(null);
   const [userDetails, setUserDetails] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setIsAuthenticated(!!session);
-      setLoading(false);
-    });
+    const initializeAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setUser(session?.user ?? null);
+        setIsAuthenticated(!!session);
+        
+        if (session?.user) {
+          // Fetch user details if we have a session
+          const { data, error } = await supabase
+            .from("users")
+            .select("*")
+            .eq("user_id", session.user.id)
+            .single();
+          
+          if (error) throw error;
+          setUserDetails(data);
+        } else {
+          // Redirect to login if no session
+          navigate('/login', { replace: true });
+        }
+      } catch (error) {
+        console.error("Error initializing auth:", error);
+        setUser(null);
+        setUserDetails(null);
+        setIsAuthenticated(false);
+        navigate('/login', { replace: true });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initializeAuth();
 
     // Listen for changes on auth state (logged in, signed out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setUser(session?.user ?? null);
       setIsAuthenticated(!!session);
+      
+      if (session?.user) {
+        try {
+          const { data, error } = await supabase
+            .from("users")
+            .select("*")
+            .eq("user_id", session.user.id)
+            .single();
+          
+          if (error) throw error;
+          setUserDetails(data);
+        } catch (error) {
+          console.error("Error fetching user details:", error);
+          setUserDetails(null);
+          navigate('/login', { replace: true });
+        }
+      } else {
+        setUserDetails(null);
+        navigate('/login', { replace: true });
+      }
+      
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
-
-  // Fetch user details whenever user changes
-  useEffect(() => {
-    const fetchUserDetails = async () => {
-      if (!user) {
-        setUserDetails(null);
-        return;
-      }
-  
-      try {
-        const { data, error } = await supabase
-          .from("users")
-          .select("*")
-          .eq("user_id", user.id)
-          .single();
-  
-        if (error) throw error;
-        setUserDetails(data);
-      } catch (error) {
-        console.error("Error fetching user details:", error.message);
-        setUserDetails(null);
-      }
-    };
-  
-    fetchUserDetails();
-  }, [user?.id]);
+  }, [navigate]);
 
   const updateUserDetails = (newDetails) => {
     setUserDetails(prev => ({ ...prev, ...newDetails }));
@@ -77,6 +101,9 @@ export const AuthProvider = ({ children }) => {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       setUserDetails(null);
+      setUser(null);
+      setIsAuthenticated(false);
+      navigate('/login', { replace: true });
     } catch (error) {
       console.error('Error logging out:', error.message);
     }
