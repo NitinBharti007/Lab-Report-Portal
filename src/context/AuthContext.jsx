@@ -85,8 +85,8 @@ export const AuthProvider = ({ children }) => {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-          <Loader message="Loading..." />
-        </div>
+        <Loader message="Loading..." />
+      </div>
     );
   }
 
@@ -97,7 +97,8 @@ export const AuthProvider = ({ children }) => {
       userDetails, 
       login, 
       logout,
-      updateUserDetails 
+      updateUserDetails,
+      loading
     }}>
       {children}
     </AuthContext.Provider>

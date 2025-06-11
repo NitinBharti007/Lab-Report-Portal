@@ -9,6 +9,7 @@ import ContactForm from "./components/ContactForm"
 import ReportForm from "./components/ReportForm"
 import { supabase } from '@/lib/supabaseClient';
 import toast, { Toaster } from 'react-hot-toast'
+import { useLocation } from 'react-router-dom'
 
 // Form schema for clinic
 const clinicFormSchema = z.object({
@@ -31,10 +32,24 @@ export default function Clinics() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isAddContactDialogOpen, setIsAddContactDialogOpen] = useState(false)
   const [isAddReportDialogOpen, setIsAddReportDialogOpen] = useState(false)
+  const location = useLocation()
 
   useEffect(() => {
     fetchClinics()
   }, [])
+
+  // Handle clinic selection from URL query parameter
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search)
+    const clinicId = searchParams.get('clinic')
+    
+    if (clinicId && clinics.length > 0) {
+      const clinic = clinics.find(c => c.id === clinicId)
+      if (clinic) {
+        handleViewClinic(clinic)
+      }
+    }
+  }, [location.search, clinics])
 
   const fetchClinics = async () => {
     try {
@@ -55,7 +70,19 @@ export default function Clinics() {
 
       console.log('Fetching clinics for user:', user.id)
       
-      const { data, error } = await supabase
+      // Get user's role and clinic_id
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role, clinic_id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (userError) {
+        console.error('Error fetching user data:', userError)
+        throw userError
+      }
+
+      let query = supabase
         .from('clinics')
         .select(`
           id,
@@ -72,6 +99,13 @@ export default function Clinics() {
         `)
         .order('created_at', { ascending: false })
 
+      // If user is not admin, only show their linked clinic
+      if (userData.role !== 'admin' && userData.clinic_id) {
+        query = query.eq('id', userData.clinic_id)
+      }
+
+      const { data, error } = await query
+
       if (error) {
         console.error('Supabase error:', error)
         throw error
@@ -81,7 +115,7 @@ export default function Clinics() {
       setClinics(data || [])
     } catch (error) {
       console.error('Error fetching clinics:', error)
-      // You might want to show an error toast here
+      toast.error(error.message || 'Failed to fetch clinics')
     } finally {
       setIsLoading(false)
     }
@@ -183,8 +217,13 @@ export default function Clinics() {
       }
 
       console.log('Successfully added clinic:', newClinic)
+      
+      // Update the clinics list with the new clinic
       setClinics(prev => [newClinic, ...prev])
+      
+      // Close the add dialog
       setIsAddDialogOpen(false)
+      
       toast.success('Clinic added successfully')
     } catch (error) {
       console.error('Error adding clinic:', error)
@@ -269,7 +308,11 @@ export default function Clinics() {
         throw new Error('Only administrators can edit clinics')
       }
 
-      const { error } = await supabase
+      console.log('Editing clinic:', editingClinic)
+      console.log('Update data:', data)
+
+      // Update the clinic
+      const { data: updatedClinic, error: updateError } = await supabase
         .from('clinics')
         .update({
           name: data.name,
@@ -277,37 +320,41 @@ export default function Clinics() {
           region: data.region,
           email: data.email,
           logo_url: data.logo_url,
-          contact_ids: data.contact_ids || [],
-          report_ids: data.report_ids || [],
           last_modified: new Date().toISOString()
         })
         .eq('id', editingClinic.id)
+        .select()
+        .single()
 
-      if (error) throw error
+      if (updateError) throw updateError
+
+      console.log('Updated clinic:', updatedClinic)
 
       // Update the local state
-      setClinics(prev => prev.map(clinic => 
-        clinic.id === editingClinic.id 
-          ? { ...clinic, ...data, last_modified: new Date().toISOString() }
-          : clinic
-      ))
+      setClinics(prev => prev.map(clinic => {
+        if (clinic.id === editingClinic.id) {
+          return {
+            ...clinic,
+            ...updatedClinic
+          }
+        }
+        return clinic
+      }))
 
-      // If we're in details view, update the selected clinic
+      // If the edited clinic is currently selected, update it
       if (selectedClinic && selectedClinic.id === editingClinic.id) {
         setSelectedClinic(prev => ({
           ...prev,
-          ...data,
-          last_modified: new Date().toISOString()
+          ...updatedClinic
         }))
       }
 
+      toast.success('Clinic updated successfully')
       setIsEditDialogOpen(false)
       setEditingClinic(null)
-      toast.success("Clinic updated successfully")
     } catch (error) {
       console.error('Error updating clinic:', error)
-      toast.error("Failed to update clinic")
-      throw error
+      toast.error(error.message || 'Failed to update clinic')
     }
   }
 

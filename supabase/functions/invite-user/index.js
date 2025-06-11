@@ -1,17 +1,19 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Max-Age': '86400',
-      },
+      headers: corsHeaders,
     })
   }
 
@@ -21,7 +23,7 @@ serve(async (req) => {
       status: 405,
       headers: { 
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
+        ...corsHeaders
       },
     })
   }
@@ -50,7 +52,7 @@ serve(async (req) => {
         status: 500,
         headers: { 
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          ...corsHeaders
         },
       })
     }
@@ -58,20 +60,20 @@ serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
     // Read the request body
-    const { email, name } = await req.json()
-    console.log('Request body:', { email, name })
+    const { email, name, clinic_id, clinic_name, user_id, redirect_to } = await req.json()
+    console.log('Request body:', { email, name, clinic_id, clinic_name, user_id, redirect_to })
 
     if (!email) {
       return new Response(JSON.stringify({ error: 'Email is required' }), {
         status: 400,
         headers: { 
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          ...corsHeaders
         },
       })
     }
 
-    console.log('Creating user with:', { email, name })
+    console.log('Creating user with:', { email, name, clinic_id, clinic_name, user_id })
 
     // Call Supabase Admin API to create the user
     const response = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
@@ -85,13 +87,17 @@ serve(async (req) => {
         email,
         user_metadata: {
           name: name || '',
+          clinic_id,
+          clinic_name
         },
         email_confirm: false,
         // Add these fields to ensure invitation is sent
         should_create_user: true,
-        email_redirect_to: `${supabaseUrl}/auth/callback`,
+        email_redirect_to: redirect_to || `${supabaseUrl}/auth/callback`,
         data: {
           name: name || '',
+          clinic_id,
+          clinic_name
         }
       }),
     })
@@ -112,7 +118,7 @@ serve(async (req) => {
         status: response.status,
         headers: { 
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          ...corsHeaders
         },
       })
     }
@@ -129,8 +135,10 @@ serve(async (req) => {
         email,
         data: {
           name: name || '',
+          clinic_id,
+          clinic_name
         },
-        redirect_to: `${supabaseUrl}/auth/callback`
+        redirect_to: redirect_to || `${supabaseUrl}/auth/callback`
       }),
     })
 
@@ -157,7 +165,7 @@ serve(async (req) => {
         status: 200,
         headers: { 
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          ...corsHeaders
         },
       }
     )
@@ -172,7 +180,7 @@ serve(async (req) => {
         status: 500,
         headers: { 
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*',
+          ...corsHeaders
         },
       }
     )

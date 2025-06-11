@@ -31,13 +31,7 @@ import {
 const contactFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   email: z.string().email("Invalid email address"),
-  role: z.string().min(1, "Role is required"),
 })
-
-const ROLES = [
-  "Admin",
-  "Client"
-]
 
 export default function ContactForm({ isOpen, onClose, onSubmit }) {
   const form = useForm({
@@ -45,7 +39,6 @@ export default function ContactForm({ isOpen, onClose, onSubmit }) {
     defaultValues: {
       name: "",
       email: "",
-      role: "",
     },
   })
 
@@ -74,11 +67,15 @@ export default function ContactForm({ isOpen, onClose, onSubmit }) {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Name</FormLabel>
+                  <FormLabel>Name<span className="text-red-500">*</span></FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter name" {...field} />
+                    <Input 
+                      placeholder="Enter name" 
+                      {...field} 
+                      className={form.formState.errors.name ? "border-red-500 focus-visible:ring-red-500" : ""}
+                    />
                   </FormControl>
-                  <FormMessage />
+                  <FormMessage className="text-red-500" />
                 </FormItem>
               )}
             />
@@ -88,41 +85,22 @@ export default function ContactForm({ isOpen, onClose, onSubmit }) {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>Email<span className="text-red-500">*</span></FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter email address" type="email" {...field} />
+                    <Input 
+                      placeholder="Enter email address" 
+                      type="email" 
+                      {...field} 
+                      className={form.formState.errors.email ? "border-red-500 focus-visible:ring-red-500" : ""}
+                    />
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="role"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Role</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select role" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {ROLES.map((role) => (
-                        <SelectItem key={role} value={role}>
-                          {role}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
+                  <FormMessage className="text-red-500" />
                 </FormItem>
               )}
             />
 
             <DialogFooter>
+              <Button variant="outline" onClick={onClose}>Cancel</Button>
               <Button type="submit">Add Contact</Button>
             </DialogFooter>
           </form>

@@ -87,10 +87,9 @@ function getAvatarUrl(path) {
 }
 
 export default function UserDetails() {
-  const { user: globalUser, updateUser } = useUser();
-  const { updateUserDetails } = useAuth();
+  const { userDetails: globalUser, updateUserDetails } = useAuth();
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -117,6 +116,7 @@ export default function UserDetails() {
     }
   }, [location, navigate]);
 
+  // Initialize form data from global user
   useEffect(() => {
     if (globalUser) {
       setUser(globalUser);
@@ -124,7 +124,6 @@ export default function UserDetails() {
         name: globalUser.name || "",
         email: globalUser.email || "",
       });
-      setLoading(false);
     }
   }, [globalUser]);
 
@@ -214,7 +213,7 @@ export default function UserDetails() {
 
       // Update user record with the public URL
       const { data: updatedUser, error: updateError } = await supabase
-        .from('users')
+        .from("users")
         .update({ 
           avatar_url: publicUrl,
           last_modified: new Date().toISOString()
@@ -229,7 +228,6 @@ export default function UserDetails() {
       }
 
       setUser(updatedUser);
-      updateUser(updatedUser); // Update UserContext
       updateUserDetails(updatedUser); // Update AuthContext
       toast.success("Avatar updated successfully", { id: loadingToast });
     } catch (err) {
@@ -352,7 +350,6 @@ export default function UserDetails() {
       }
 
       setUser(freshUserData);
-      updateUser(freshUserData); // Update UserContext
       updateUserDetails(freshUserData); // Update AuthContext
       setFormData({
         name: freshUserData.name || "",
@@ -368,7 +365,7 @@ export default function UserDetails() {
     }
   };
 
-  if (loading) {
+  if (!user) {
     return (
       <PageLayout>
         <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center">
@@ -378,12 +375,12 @@ export default function UserDetails() {
     );
   }
 
-  if (error || !user) {
+  if (error) {
     return (
       <PageLayout>
         <div className="flex min-h-screen items-center justify-center">
           <div className="text-center">
-            <p className="text-destructive">{error || "User not found."}</p>
+            <p className="text-destructive">{error}</p>
             <Button variant="outline" className="mt-4" onClick={() => navigate(-1)}>
               Go Back
             </Button>

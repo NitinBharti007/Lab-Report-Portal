@@ -1,3 +1,5 @@
+import React, { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -40,8 +42,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { useState, useMemo, useEffect } from "react"
-import { supabase } from "@/lib/supabaseClient"
 import { toast } from "react-hot-toast"
 import ClinicReportDetails from "./ClinicReportDetails"
 import UpdateClinicReportDialog from "./UpdateClinicReportDialog"
@@ -55,7 +55,9 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog"
-import ContactForm from "./ContactForm"
+import ContactForm from './ContactForm'
+import { useAuth } from "@/context/AuthContext"
+import { supabase } from "@/lib/supabaseClient"
 
 const TEST_TYPES = ["Blood", "Urine", "COVID-19", "DNA"]
 
@@ -69,7 +71,9 @@ export default function ClinicDetails({
   onEditClinic, 
   onAddContact, 
   onAddReport,
-  onUpdateReport
+  onUpdateReport,
+  onViewPatient,
+  onDeleteClinic
 }) {
   const [clinic, setClinic] = useState(initialClinic)
   const [reports, setReports] = useState([])
@@ -80,6 +84,8 @@ export default function ClinicDetails({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [reportToDelete, setReportToDelete] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const { userDetails } = useAuth()
+  const navigate = useNavigate()
 
   const [filters, setFilters] = useState({
     testStatus: "all",
@@ -97,8 +103,13 @@ export default function ClinicDetails({
   const [showContactForm, setShowContactForm] = useState(false)
   const [contacts, setContacts] = useState([])
 
+  // Update local state when props change
   useEffect(() => {
-    if (clinic.reports) {
+    setClinic(initialClinic)
+  }, [initialClinic])
+
+  useEffect(() => {
+    if (clinic?.reports) {
       setReports(clinic.reports)
       setIsLoading(false)
     } else {
@@ -108,10 +119,10 @@ export default function ClinicDetails({
 
   // Add new useEffect to handle report updates
   useEffect(() => {
-    if (clinic.reports) {
+    if (clinic?.reports) {
       setReports(clinic.reports)
     }
-  }, [clinic.reports])
+  }, [clinic?.reports])
 
   useEffect(() => {
     if (viewMode === "view" && selectedReport) {
@@ -603,75 +614,82 @@ export default function ClinicDetails({
       // Generate a new UUID for the contact
       const contactId = crypto.randomUUID()
 
-      // Update the clinic's contact_ids array with the new contact ID
-      const updatedContactIds = [...(clinic.contact_ids || []), contactId]
-      const { error: updateError } = await supabase
-        .from('clinics')
-        .update({ 
-          contact_ids: updatedContactIds,
-          last_modified: new Date().toISOString()
-        })
-        .eq('id', clinic.id)
-
-      if (updateError) {
-        console.error('Error updating clinic:', updateError)
-        throw updateError
-      }
-
-      // Get the current session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-      if (sessionError) throw sessionError
-      if (!session) throw new Error('No active session')
-
-      // Call the invite-user function
+      // Call the invite-user function first
       try {
-        const response = await fetch('https://pxycafbswegyrxqiazsc.supabase.co/functions/v1/invite-user', {
+        console.log('Starting invitation process for:', {
+          email: contactData.email,
+          name: contactData.name,
+          clinic_id: clinic.id,
+          clinic_name: clinic.name,
+          user_id: contactId
+        });
+        
+        const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/invite-user`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`
           },
           body: JSON.stringify({
             email: contactData.email,
             name: contactData.name,
-          }),
+            clinic_id: clinic.id,
+            clinic_name: clinic.name,
+            user_id: contactId,
+            redirect_to: `${window.location.origin}/auth/callback`
+          })
         });
 
-        const data = await response.json();
-
         if (!response.ok) {
-          console.error('❌ Error inviting user:', data);
-          throw new Error(data.error?.message || 'Failed to invite user');
+          const errorData = await response.json();
+          console.error('❌ Error inviting user:', errorData);
+          throw new Error(errorData.error || 'Failed to invite user');
         }
 
+        const data = await response.json();
+        console.log('Invitation response:', data);
+
+        // Only update clinic's contact_ids after successful invitation
+        const updatedContactIds = [...(clinic.contact_ids || []), contactId]
+        const { error: updateError } = await supabase
+          .from('clinics')
+          .update({ 
+            contact_ids: updatedContactIds,
+            last_modified: new Date().toISOString()
+          })
+          .eq('id', clinic.id)
+
+        if (updateError) {
+          console.error('Error updating clinic:', updateError)
+          throw updateError
+        }
+
+        // Update local state
+        setClinic(prev => ({
+          ...prev,
+          contact_ids: updatedContactIds
+        }))
+
+        // Add to contacts list with the new contact data
+        const newContact = {
+          id: contactId,
+          name: contactData.name,
+          email: contactData.email,
+          clinic_id: clinic.id
+        }
+        setContacts(prev => [...prev, newContact])
+
         console.log('✅ User invited successfully:', data);
+        toast.success('Invitation sent successfully');
+        setShowContactForm(false)
       } catch (inviteError) {
         console.error('Error inviting user:', inviteError);
-        // Continue with contact addition even if invitation fails
-        toast.error('Contact added but invitation failed. Please try inviting manually.');
+        toast.error('Failed to send invitation. Please try again.');
+        return; // Don't proceed with contact addition if invitation fails
       }
-
-      // Update local state
-      setClinic(prev => ({
-        ...prev,
-        contact_ids: updatedContactIds
-      }))
-
-      // Add to contacts list with the new contact data
-      const newContact = {
-        id: contactId,
-        name: contactData.name,
-        email: contactData.email,
-        role: contactData.role,
-        clinic_id: clinic.id
-      }
-      setContacts(prev => [...prev, newContact])
-
-      toast.success("Contact added successfully")
-      setShowContactForm(false)
     } catch (error) {
       console.error('Error adding contact:', error)
-      toast.error("Failed to add contact")
+      toast.error(error.message || "Failed to add contact")
     }
   }
 
@@ -689,21 +707,55 @@ export default function ClinicDetails({
   }
 
   return (
-    <div className="container mx-auto py-2 px-2 sm:py-4 sm:px-4">
+    <div className="container mx-auto py-2 px-2 sm:py-4 sm:px-4 space-y-4 sm:space-y-6">
       {/* Header Section */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
         <Button
           variant="ghost"
           className="text-sm sm:text-base"
-          onClick={onBack}
+          onClick={(e) => {
+            e.preventDefault();
+            if (userDetails?.role === 'admin') {
+              onBack();
+            } else {
+              // For non-admin users, navigate to their dashboard or home
+              navigate('/');
+            }
+          }}
         >
           <IconArrowLeft className="h-4 w-4 mr-2" />
-          Back to Clinics
+          {userDetails?.role === 'admin' ? 'Back to Clinics' : 'Back to Dashboard'}
         </Button>
-        <Button variant="outline" onClick={onEditClinic} className="text-sm w-full sm:w-auto">
-          <IconEdit className="h-4 w-4 mr-2" />
-          Edit Clinic
-        </Button>
+        {(userDetails?.role === 'admin' || userDetails?.clinic_id === clinic.id) && (
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Button 
+              variant="outline" 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onEditClinic();
+              }} 
+              className="text-sm w-full sm:w-auto"
+            >
+              <IconEdit className="h-4 w-4 mr-2" />
+              Edit Clinic
+            </Button>
+            {userDetails?.role === 'admin' && (
+              <Button 
+                variant="destructive" 
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDeleteClinic();
+                }} 
+                className="text-sm w-full sm:w-auto"
+              >
+                <IconTrash className="h-4 w-4 mr-2" />
+                Delete Clinic
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 sm:gap-6 max-w-4xl mx-auto">
@@ -712,7 +764,15 @@ export default function ClinicDetails({
           <CardHeader className="pb-3 px-3 sm:px-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <Avatar className="h-16 w-16 sm:h-20 sm:w-20">
-                <AvatarImage src={clinic.logo_url} />
+                <AvatarImage 
+                  src={clinic.logo_url} 
+                  alt={clinic.name}
+                  className="object-cover"
+                  onError={(e) => {
+                    console.error('Error loading image:', clinic.logo_url);
+                    e.target.style.display = 'none';
+                  }}
+                />
                 <AvatarFallback className="text-lg">{clinic.name.slice(0, 2)}</AvatarFallback>
               </Avatar>
               <div>
@@ -757,278 +817,282 @@ export default function ClinicDetails({
         </Card>
 
         {/* Contacts Section */}
-        <Card>
-          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 px-3 sm:px-6">
-            <div>
-              <CardTitle className="text-lg">Contacts</CardTitle>
-              <CardDescription className="text-sm">
-                {clinic.contact_ids?.length || 0} contacts
-              </CardDescription>
-            </div>
-            <Button onClick={() => setShowContactForm(true)} size="sm" className="w-full sm:w-auto">
-              <IconUserPlus className="h-4 w-4 mr-2" />
-              Add Contact
-            </Button>
-          </CardHeader>
-          <Separator />
-          <CardContent className="pt-6 px-3 sm:px-6">
-            {clinic.contact_ids?.length > 0 ? (
-              <div className="grid gap-3">
-                {clinic.contact_ids.map((contactId) => (
-                  <div key={contactId} className="flex items-center justify-between p-3 border rounded-lg">
-                    <div>
-                      <p className="text-sm font-medium">Contact ID</p>
-                      <p className="text-sm text-muted-foreground">{contactId}</p>
+        {(userDetails?.role === 'admin' || userDetails?.clinic_id === clinic.id) && (
+          <Card>
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 px-3 sm:px-6">
+              <div>
+                <CardTitle className="text-lg">Contacts</CardTitle>
+                <CardDescription className="text-sm">
+                  {clinic.contact_ids?.length || 0} contacts
+                </CardDescription>
+              </div>
+              <Button onClick={() => setShowContactForm(true)} size="sm" className="w-full sm:w-auto">
+                <IconUserPlus className="h-4 w-4 mr-2" />
+                Add Contact
+              </Button>
+            </CardHeader>
+            <Separator />
+            <CardContent className="pt-6 px-3 sm:px-6">
+              {clinic.contact_ids?.length > 0 ? (
+                <div className="grid gap-3">
+                  {clinic.contact_ids.map((contactId) => (
+                    <div key={contactId} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium">Contact ID</p>
+                        <p className="text-sm text-muted-foreground">{contactId}</p>
+                      </div>
+                      <Badge variant="secondary">Active</Badge>
                     </div>
-                    <Badge variant="secondary">Active</Badge>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-6">
-                <p className="text-sm text-muted-foreground">No contacts added yet.</p>
-                <Button onClick={() => setShowContactForm(true)} variant="link" className="mt-2">
-                  Add your first contact
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Reports Section */}
-        <Card className="overflow-hidden">
-          <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 px-3 sm:px-6">
-            <div>
-              <CardTitle className="text-lg">Reports</CardTitle>
-              <CardDescription className="text-sm">
-                {isLoading ? "Loading..." : `${filteredAndSortedReports.length} reports`}
-              </CardDescription>
-            </div>
-            <Button onClick={onAddReport} size="sm" className="w-full sm:w-auto">
-              <IconFileReport className="h-4 w-4 mr-2" />
-              Add Report
-            </Button>
-          </CardHeader>
-          <Separator />
-          <CardContent className="p-0">
-            <div className="border-t">
-              {/* Search and Filters */}
-              <div className="p-4 space-y-4 border-b">
-                <div className="relative">
-                  <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    placeholder="Search reports..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <Select
-                    value={filters.testStatus}
-                    onValueChange={(value) => handleFilterChange('testStatus', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filter by Test Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Statuses</SelectItem>
-                      {TEST_STATUS.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={filters.testType}
-                    onValueChange={(value) => handleFilterChange('testType', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filter by Test Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      {TEST_TYPES.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-
-                  <Select
-                    value={filters.processingLab}
-                    onValueChange={(value) => handleFilterChange('processingLab', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Filter by Processing Lab" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Labs</SelectItem>
-                      {PROCESSING_LABS.map((lab) => (
-                        <SelectItem key={lab} value={lab}>
-                          {lab}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {isLoading ? (
-                <div className="flex items-center justify-center p-8">
-                  <p className="text-muted-foreground">Loading reports...</p>
-                </div>
-              ) : filteredAndSortedReports.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <p className="text-lg font-medium text-muted-foreground">No reports found</p>
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {searchQuery || Object.values(filters).some(v => v !== 'all') 
-                      ? 'Try adjusting your search or filters'
-                      : 'Add your first report using the "Add Report" button above'}
-                  </p>
+                  ))}
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <div className="min-w-[800px]">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead 
-                            className="whitespace-nowrap cursor-pointer group"
-                            onClick={() => handleSort('testStatus')}
-                          >
-                            <div className="flex items-center">
-                              Test Status
-                              <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {getSortIcon('testStatus')}
-                              </span>
-                            </div>
-                          </TableHead>
-                          <TableHead 
-                            className="whitespace-nowrap cursor-pointer group"
-                            onClick={() => handleSort('lastName')}
-                          >
-                            <div className="flex items-center">
-                              Last Name
-                              <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {getSortIcon('lastName')}
-                              </span>
-                            </div>
-                          </TableHead>
-                          <TableHead 
-                            className="whitespace-nowrap cursor-pointer group"
-                            onClick={() => handleSort('firstName')}
-                          >
-                            <div className="flex items-center">
-                              First Name
-                              <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {getSortIcon('firstName')}
-                              </span>
-                            </div>
-                          </TableHead>
-                          <TableHead 
-                            className="whitespace-nowrap cursor-pointer group"
-                            onClick={() => handleSort('testType')}
-                          >
-                            <div className="flex items-center">
-                              Test Type
-                              <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {getSortIcon('testType')}
-                              </span>
-                            </div>
-                          </TableHead>
-                          <TableHead 
-                            className="whitespace-nowrap cursor-pointer group"
-                            onClick={() => handleSort('reportCompletionDate')}
-                          >
-                            <div className="flex items-center">
-                              Completion Date
-                              <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {getSortIcon('reportCompletionDate')}
-                              </span>
-                            </div>
-                          </TableHead>
-                          <TableHead 
-                            className="whitespace-nowrap cursor-pointer group"
-                            onClick={() => handleSort('processingLab')}
-                          >
-                            <div className="flex items-center">
-                              Processing Lab
-                              <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {getSortIcon('processingLab')}
-                              </span>
-                            </div>
-                          </TableHead>
-                          <TableHead 
-                            className="whitespace-nowrap cursor-pointer group"
-                            onClick={() => handleSort('invoice')}
-                          >
-                            <div className="flex items-center">
-                              Invoice
-                              <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {getSortIcon('invoice')}
-                              </span>
-                            </div>
-                          </TableHead>
-                          <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredAndSortedReports.map((report) => (
-                          <TableRow key={report.id}>
-                            <TableCell className="whitespace-nowrap">
-                              <Badge variant={
-                                report.testStatus === "Completed" ? "success" :
-                                report.testStatus === "In Progress" ? "warning" :
-                                report.testStatus === "Cancelled" ? "destructive" :
-                                "secondary"
-                              }>
-                                {report.testStatus}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="whitespace-nowrap">{report.lastName}</TableCell>
-                            <TableCell className="whitespace-nowrap">{report.firstName}</TableCell>
-                            <TableCell className="whitespace-nowrap">{report.testType}</TableCell>
-                            <TableCell className="whitespace-nowrap">{formatDate(report.reportCompletionDate)}</TableCell>
-                            <TableCell className="whitespace-nowrap">{report.processingLab}</TableCell>
-                            <TableCell className="whitespace-nowrap">{report.invoice}</TableCell>
-                            <TableCell className="text-right whitespace-nowrap">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" className="h-8 w-8 p-0">
-                                    <span className="sr-only">Open menu</span>
-                                    <IconPencil className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handleViewReport(report.id)}>
-                                    <IconEye className="h-4 w-4 mr-2" />
-                                    View
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleUpdateReport(report.id)}>
-                                    <IconPencil className="h-4 w-4 mr-2" />
-                                    Update
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleDeleteClick(report)}>
-                                    <IconTrash className="h-4 w-4 mr-2" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                <div className="text-center py-6">
+                  <p className="text-sm text-muted-foreground">No contacts added yet.</p>
+                  <Button onClick={() => setShowContactForm(true)} variant="link" className="mt-2">
+                    Add your first contact
+                  </Button>
                 </div>
               )}
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Reports Section */}
+        {userDetails?.role === 'admin' && (
+          <Card className="overflow-hidden">
+            <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 px-3 sm:px-6">
+              <div>
+                <CardTitle className="text-lg">Reports</CardTitle>
+                <CardDescription className="text-sm">
+                  {isLoading ? "Loading..." : `${filteredAndSortedReports.length} reports`}
+                </CardDescription>
+              </div>
+              <Button onClick={onAddReport} size="sm" className="w-full sm:w-auto">
+                <IconFileReport className="h-4 w-4 mr-2" />
+                Add Report
+              </Button>
+            </CardHeader>
+            <Separator />
+            <CardContent className="p-0">
+              <div className="border-t">
+                {/* Search and Filters */}
+                <div className="p-4 space-y-4 border-b">
+                  <div className="relative">
+                    <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search reports..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <Select
+                      value={filters.testStatus}
+                      onValueChange={(value) => handleFilterChange('testStatus', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter by Test Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Statuses</SelectItem>
+                        {TEST_STATUS.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={filters.testType}
+                      onValueChange={(value) => handleFilterChange('testType', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter by Test Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Types</SelectItem>
+                        {TEST_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={filters.processingLab}
+                      onValueChange={(value) => handleFilterChange('processingLab', value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Filter by Processing Lab" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Labs</SelectItem>
+                        {PROCESSING_LABS.map((lab) => (
+                          <SelectItem key={lab} value={lab}>
+                            {lab}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {isLoading ? (
+                  <div className="flex items-center justify-center p-8">
+                    <p className="text-muted-foreground">Loading reports...</p>
+                  </div>
+                ) : filteredAndSortedReports.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <p className="text-lg font-medium text-muted-foreground">No reports found</p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {searchQuery || Object.values(filters).some(v => v !== 'all') 
+                        ? 'Try adjusting your search or filters'
+                        : 'Add your first report using the "Add Report" button above'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <div className="min-w-[800px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead 
+                              className="whitespace-nowrap cursor-pointer group"
+                              onClick={() => handleSort('testStatus')}
+                            >
+                              <div className="flex items-center">
+                                Test Status
+                                <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {getSortIcon('testStatus')}
+                                </span>
+                              </div>
+                            </TableHead>
+                            <TableHead 
+                              className="whitespace-nowrap cursor-pointer group"
+                              onClick={() => handleSort('lastName')}
+                            >
+                              <div className="flex items-center">
+                                Last Name
+                                <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {getSortIcon('lastName')}
+                                </span>
+                              </div>
+                            </TableHead>
+                            <TableHead 
+                              className="whitespace-nowrap cursor-pointer group"
+                              onClick={() => handleSort('firstName')}
+                            >
+                              <div className="flex items-center">
+                                First Name
+                                <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {getSortIcon('firstName')}
+                                </span>
+                              </div>
+                            </TableHead>
+                            <TableHead 
+                              className="whitespace-nowrap cursor-pointer group"
+                              onClick={() => handleSort('testType')}
+                            >
+                              <div className="flex items-center">
+                                Test Type
+                                <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {getSortIcon('testType')}
+                                </span>
+                              </div>
+                            </TableHead>
+                            <TableHead 
+                              className="whitespace-nowrap cursor-pointer group"
+                              onClick={() => handleSort('reportCompletionDate')}
+                            >
+                              <div className="flex items-center">
+                                Completion Date
+                                <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {getSortIcon('reportCompletionDate')}
+                                </span>
+                              </div>
+                            </TableHead>
+                            <TableHead 
+                              className="whitespace-nowrap cursor-pointer group"
+                              onClick={() => handleSort('processingLab')}
+                            >
+                              <div className="flex items-center">
+                                Processing Lab
+                                <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {getSortIcon('processingLab')}
+                                </span>
+                              </div>
+                            </TableHead>
+                            <TableHead 
+                              className="whitespace-nowrap cursor-pointer group"
+                              onClick={() => handleSort('invoice')}
+                            >
+                              <div className="flex items-center">
+                                Invoice
+                                <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  {getSortIcon('invoice')}
+                                </span>
+                              </div>
+                            </TableHead>
+                            <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {filteredAndSortedReports.map((report) => (
+                            <TableRow key={report.id}>
+                              <TableCell className="whitespace-nowrap">
+                                <Badge variant={
+                                  report.testStatus === "Completed" ? "success" :
+                                  report.testStatus === "In Progress" ? "warning" :
+                                  report.testStatus === "Cancelled" ? "destructive" :
+                                  "secondary"
+                                }>
+                                  {report.testStatus}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="whitespace-nowrap">{report.lastName}</TableCell>
+                              <TableCell className="whitespace-nowrap">{report.firstName}</TableCell>
+                              <TableCell className="whitespace-nowrap">{report.testType}</TableCell>
+                              <TableCell className="whitespace-nowrap">{formatDate(report.reportCompletionDate)}</TableCell>
+                              <TableCell className="whitespace-nowrap">{report.processingLab}</TableCell>
+                              <TableCell className="whitespace-nowrap">{report.invoice}</TableCell>
+                              <TableCell className="text-right whitespace-nowrap">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                      <span className="sr-only">Open menu</span>
+                                      <IconPencil className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => handleViewReport(report.id)}>
+                                      <IconEye className="h-4 w-4 mr-2" />
+                                      View
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleUpdateReport(report.id)}>
+                                      <IconPencil className="h-4 w-4 mr-2" />
+                                      Update
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleDeleteClick(report)}>
+                                      <IconTrash className="h-4 w-4 mr-2" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Update Dialog */}

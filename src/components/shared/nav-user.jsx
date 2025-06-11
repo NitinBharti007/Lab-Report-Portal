@@ -28,6 +28,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { supabase } from "@/lib/supabaseClient"
+import { toast } from "react-hot-toast"
 
 function getAvatarUrl(path) {
   if (!path) return null;
@@ -51,6 +52,14 @@ export function NavUser() {
 
   const handleAccountClick = () => {
     navigate("/account")
+  }
+
+  const handleClinicDetails = () => {
+    if (!userDetails?.clinic_id) {
+      toast.error("No clinic linked to your account")
+      return
+    }
+    navigate(`/clinic/${userDetails.clinic_id}`)
   }
 
   if (!userDetails) return null;
@@ -111,9 +120,9 @@ export function NavUser() {
                 <IconUserCircle className="mr-2 h-4 w-4" />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={handleClinicDetails}>
                 <IconCreditCard className="mr-2 h-4 w-4" />
-                Billing
+                Clinic Details
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <IconNotification className="mr-2 h-4 w-4" />

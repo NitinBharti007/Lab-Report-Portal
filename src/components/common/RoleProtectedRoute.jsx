@@ -1,9 +1,19 @@
 import { Navigate } from "react-router-dom"
 import { useAuth } from "@/context/AuthContext"
 import Unauthorized from "@/pages/Unauthorized"
+import { Loader } from "@/components/shared/loader"
 
 export function RoleProtectedRoute({ children, allowedRoles = [] }) {
-  const { userDetails, isAuthenticated } = useAuth()
+  const { userDetails, isAuthenticated, loading } = useAuth()
+
+  // Show loading state while checking authentication and user details
+  if (loading || !userDetails) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader message="Loading..." />
+      </div>
+    )
+  }
 
   // If not authenticated, redirect to login
   if (!isAuthenticated) {
@@ -16,7 +26,7 @@ export function RoleProtectedRoute({ children, allowedRoles = [] }) {
   }
 
   // If user's role is not in allowed roles, show Unauthorized page
-  if (!allowedRoles.includes(userDetails?.role)) {
+  if (!allowedRoles.includes(userDetails.role)) {
     return <Unauthorized />
   }
 

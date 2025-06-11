@@ -7,6 +7,7 @@ import Dashboard from "../../features/dashboard";
 import ResetPasswordPage from "@/features/auth/ResetPassword";
 // import UserDetails from "@/features/user/UserDetails";
 import Clinics from "@/features/clinics";
+import SingleClinic from "@/features/clinics/SingleClinic";
 import Patients from "@/features/patients";
 import Reports from "@/features/reports";
 import UserDetails from "@/features/user";
@@ -14,12 +15,21 @@ import NotFound from "@/pages/NotFound";
 import Unauthorized from "@/pages/Unauthorized";
 import { RoleProtectedRoute } from "./RoleProtectedRoute";
 import EmailVerificationCallback from "@/features/auth/EmailVerificationCallback";
+import { Loader } from "@/components/shared/loader";
 // import Team from "../../features/team";
 
 // Public Route component (redirects to dashboard if already logged in)
 const PublicRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader message="Loading..." />
+      </div>
+    );
+  }
 
   // Only allow direct access to login page
   if (location.pathname !== '/login' && !isAuthenticated) {
@@ -35,8 +45,16 @@ const PublicRoute = ({ children }) => {
 
 // Auth Route component (for password reset and forgot password)
 const AuthRoute = ({ children }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading } = useAuth();
   const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader message="Loading..." />
+      </div>
+    );
+  }
 
   // Special handling for reset password route
   if (location.pathname === '/reset-password') {
@@ -54,15 +72,23 @@ const AuthRoute = ({ children }) => {
 };
 
 const AppRoutes = () => {
-  const { userDetails } = useAuth();
+  const { userDetails, loading } = useAuth();
   const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader message="Loading..." />
+      </div>
+    );
+  }
 
   // Function to check if the current path is allowed for the user's role
   const isPathAllowed = (path) => {
     if (!userDetails) return false;
 
     const adminOnlyPaths = ['/clinics', '/patients'];
-    const clientPaths = ['/', '/dashboard', '/reports', '/account'];
+    const clientPaths = ['/', '/dashboard', '/reports', '/account', '/clinic'];
 
     if (userDetails.role === 'admin') {
       return [...adminOnlyPaths, ...clientPaths].includes(path);
@@ -161,6 +187,14 @@ const AppRoutes = () => {
           element={
             <RoleProtectedRoute>
               <UserDetails />
+            </RoleProtectedRoute>
+          }
+        />
+        <Route
+          path="/clinic/:clinicId"
+          element={
+            <RoleProtectedRoute>
+              <SingleClinic />
             </RoleProtectedRoute>
           }
         />
