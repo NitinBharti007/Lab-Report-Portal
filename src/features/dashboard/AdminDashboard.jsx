@@ -212,8 +212,7 @@ export default function AdminDashboard() {
           created_at,
           patients (
             first_name,
-            last_name,
-            avatar_url
+            last_name
           ),
           clinics (
             name,
