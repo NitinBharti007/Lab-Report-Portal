@@ -21,7 +21,7 @@ export default function PatientsFilters({
       <div className="relative">
         <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search patients..."
+          placeholder="Search patients by name..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           className="pl-9"

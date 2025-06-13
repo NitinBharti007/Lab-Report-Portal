@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
@@ -48,12 +49,7 @@ export default function PatientForm({
 }) {
   const form = useForm({
     resolver: zodResolver(patientFormSchema),
-    defaultValues: patient ? {
-      first_name: patient.first_name,
-      last_name: patient.last_name,
-      gender: patient.gender,
-      date_of_birth: patient.date_of_birth,
-    } : {
+    defaultValues: {
       first_name: "",
       last_name: "",
       gender: "",
@@ -61,38 +57,76 @@ export default function PatientForm({
     },
   })
 
+  // Update form values when patient data changes or dialog opens
+  useEffect(() => {
+    if (open) {
+      if (patient && mode === "update") {
+        form.reset({
+          first_name: patient.first_name,
+          last_name: patient.last_name,
+          gender: patient.gender,
+          date_of_birth: patient.date_of_birth,
+        })
+      } else {
+        form.reset({
+          first_name: "",
+          last_name: "",
+          gender: "",
+          date_of_birth: "",
+        })
+      }
+    }
+  }, [patient, mode, form, open])
+
   const handleSubmit = (data) => {
     onSubmit(data)
   }
 
+  const handleClose = () => {
+    // Don't reset form here, let the parent component handle state
+    onCancel?.()
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">
+    <Dialog 
+      open={open} 
+      onOpenChange={(isOpen) => {
+        if (!isOpen) handleClose()
+        onOpenChange?.(isOpen)
+      }}
+    >
+      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto px-4 sm:px-6">
+        <DialogHeader className="space-y-3 pb-4">
+          <DialogTitle className="text-xl font-semibold">
             {mode === "add" ? "Add New Patient" : "Update Patient"}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-sm text-muted-foreground">
             {mode === "add" 
-              ? "Enter the patient's information below"
-              : "Update the patient's information below"
+              ? "Enter the patient's information below. All fields marked with * are required."
+              : "Update the patient's information below. All fields marked with * are required."
             }
           </DialogDescription>
         </DialogHeader>
 
+        <Separator className="mb-6" />
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <FormField
                 control={form.control}
                 name="first_name"
                 render={({ field }) => (
-                  <FormItem className="space-y-2">
-                    <FormLabel className="text-sm font-medium">First Name *</FormLabel>
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="text-sm font-medium mb-1.5">First Name <span className="text-destructive">*</span></FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter first name" {...field} className="w-full" />
+                      <Input 
+                        placeholder="Enter first name" 
+                        {...field} 
+                        className="h-10 w-full"
+                      />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-xs mt-1" />
                   </FormItem>
                 )}
               />
@@ -101,27 +135,31 @@ export default function PatientForm({
                 control={form.control}
                 name="last_name"
                 render={({ field }) => (
-                  <FormItem className="space-y-2">
-                    <FormLabel className="text-sm font-medium">Last Name *</FormLabel>
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="text-sm font-medium mb-1.5">Last Name <span className="text-destructive">*</span></FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter last name" {...field} className="w-full" />
+                      <Input 
+                        placeholder="Enter last name" 
+                        {...field} 
+                        className="h-10 w-full"
+                      />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-xs mt-1" />
                   </FormItem>
                 )}
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <FormField
                 control={form.control}
                 name="gender"
                 render={({ field }) => (
-                  <FormItem className="space-y-2">
-                    <FormLabel className="text-sm font-medium">Gender *</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="text-sm font-medium mb-1.5">Gender <span className="text-destructive">*</span></FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
-                        <SelectTrigger className="w-full">
+                        <SelectTrigger className="h-10 w-full">
                           <SelectValue placeholder="Select gender" />
                         </SelectTrigger>
                       </FormControl>
@@ -133,7 +171,7 @@ export default function PatientForm({
                         ))}
                       </SelectContent>
                     </Select>
-                    <FormMessage />
+                    <FormMessage className="text-xs mt-1" />
                   </FormItem>
                 )}
               />
@@ -142,27 +180,36 @@ export default function PatientForm({
                 control={form.control}
                 name="date_of_birth"
                 render={({ field }) => (
-                  <FormItem className="space-y-2">
-                    <FormLabel className="text-sm font-medium">Date of Birth *</FormLabel>
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="text-sm font-medium mb-1.5">Date of Birth <span className="text-destructive">*</span></FormLabel>
                     <FormControl>
-                      <Input type="date" {...field} className="w-full" />
+                      <Input 
+                        type="date" 
+                        {...field} 
+                        className="h-10 w-full"
+                      />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage className="text-xs mt-1" />
                   </FormItem>
                 )}
               />
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onCancel}
-                className="w-full sm:w-auto"
+            <Separator className="my-6" />
+
+            <DialogFooter className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={handleClose}
+                className="w-full sm:w-[120px] h-10"
               >
                 Cancel
               </Button>
-              <Button type="submit" className="w-full sm:w-auto">
+              <Button 
+                type="submit"
+                className="w-full sm:w-[120px] h-10"
+              >
                 {mode === "add" ? "Add Patient" : "Update Patient"}
               </Button>
             </DialogFooter>

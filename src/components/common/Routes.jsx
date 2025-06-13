@@ -173,6 +173,22 @@ const AppRoutes = () => {
             </RoleProtectedRoute>
           }
         />
+        <Route
+          path="/patients/:patientId"
+          element={
+            <RoleProtectedRoute allowedRoles={["admin"]}>
+              <Patients />
+            </RoleProtectedRoute>
+          }
+        />
+        <Route
+          path="/patients/:patientId/reports/:reportId"
+          element={
+            <RoleProtectedRoute allowedRoles={["admin"]}>
+              <Patients />
+            </RoleProtectedRoute>
+          }
+        />
 
         {/* Shared Protected Routes */}
         <Route

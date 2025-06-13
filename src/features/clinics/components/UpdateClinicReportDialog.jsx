@@ -386,7 +386,7 @@ export default function UpdateClinicReportDialog({ isOpen, onClose, onSubmit, re
                   <FormItem>
                     <FormLabel className="text-sm font-medium">Invoice Number</FormLabel>
                     <FormControl>
-                      <Input {...field} disabled className="bg-muted" />
+                      <Input {...field} readOnly className="bg-muted cursor-not-allowed" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -400,7 +400,7 @@ export default function UpdateClinicReportDialog({ isOpen, onClose, onSubmit, re
                   <FormItem>
                     <FormLabel className="text-sm font-medium">Tracking Number</FormLabel>
                     <FormControl>
-                      <Input {...field} disabled className="bg-muted" />
+                      <Input {...field} readOnly className="bg-muted cursor-not-allowed" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

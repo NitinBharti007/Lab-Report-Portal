@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useNavigate, useParams, useLocation } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -14,12 +15,80 @@ import {
 import { Separator } from "@/components/ui/separator"
 import PatientReports from "./PatientReports"
 import ReportDetails from "./ReportDetails"
-import ReportUpdate from "./ReportUpdate"
+import { supabase } from "@/lib/supabaseClient"
+import { toast } from "react-hot-toast"
 
 export default function PatientView({ patient, onBack, onUpdate, onDelete }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { reportId } = useParams()
   const [selectedReport, setSelectedReport] = useState(null)
-  const [viewMode, setViewMode] = useState("patient") // "patient", "report", "update_from_table", or "update_from_view"
-  const [reports, setReports] = useState([])
+  const [viewMode, setViewMode] = useState("patient") // "patient" or "report"
+
+  // Add effect to handle direct report access via URL
+  useEffect(() => {
+    const fetchReport = async () => {
+      if (reportId) {
+        try {
+          const { data, error } = await supabase
+            .from('reports')
+            .select(`
+              id,
+              status,
+              lab_test_type,
+              processing_lab,
+              created_at,
+              invoice_number,
+              tracking_number,
+              notes,
+              pdf_url,
+              clinic_id,
+              sample_collection_date,
+              date_picked_up_by_lab,
+              date_shipped_to_lab,
+              report_completion_date,
+              clinics!reports_clinic_id_fkey (
+                id,
+                name
+              )
+            `)
+            .eq('id', reportId)
+            .single()
+
+          if (error) throw error
+          if (data) {
+            // Transform the data to match the UI format
+            const transformedReport = {
+              id: data.id,
+              testStatus: data.status,
+              clinic_id: data.clinic_id,
+              associatedClinic: data.clinics?.name || 'N/A',
+              testType: data.lab_test_type,
+              processingLab: data.processing_lab,
+              invoice: data.invoice_number,
+              trackingNumber: data.tracking_number,
+              notes: data.notes,
+              pdfUrl: data.pdf_url,
+              sampleCollectionDate: data.sample_collection_date,
+              datePickedUpByLab: data.date_picked_up_by_lab,
+              dateShippedToLab: data.date_shipped_to_lab,
+              reportCompletionDate: data.report_completion_date || data.created_at,
+              firstName: patient.first_name,
+              lastName: patient.last_name
+            }
+            setSelectedReport(transformedReport)
+            setViewMode("report")
+          }
+        } catch (error) {
+          console.error('Error fetching report:', error)
+          toast.error('Failed to load report')
+          navigate(`/patients/${patient.id}`)
+        }
+      }
+    }
+
+    fetchReport()
+  }, [reportId, patient.id, navigate, patient.first_name, patient.last_name])
 
   const getGenderIcon = (gender) => {
     return gender === "Male" ? (
@@ -32,72 +101,83 @@ export default function PatientView({ patient, onBack, onUpdate, onDelete }) {
   const handleViewReport = (report) => {
     setSelectedReport(report)
     setViewMode("report")
+    // Update URL to include report ID within patient context
+    navigate(`/patients/${patient.id}/reports/${report.id}`, { replace: true })
   }
 
-  const handleUpdateFromTable = (report) => {
-    setSelectedReport(report)
-    setViewMode("update_from_table")
+  const handleUpdateReport = async (data) => {
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .update({
+          status: data.testStatus,
+          clinic_id: data.clinic_id,
+          lab_test_type: data.testType,
+          processing_lab: data.processingLab,
+          invoice_number: data.invoice,
+          notes: data.notes,
+          sample_collection_date: data.sampleCollectionDate,
+          date_picked_up_by_lab: data.datePickedUpByLab,
+          date_shipped_to_lab: data.dateShippedToLab,
+          report_completion_date: data.reportCompletionDate,
+          last_modified: new Date().toISOString()
+        })
+        .eq('id', selectedReport.id)
+
+      if (error) throw error
+
+      // Update the selected report with new data
+      setSelectedReport(prev => ({
+        ...prev,
+        ...data,
+        testStatus: data.testStatus,
+        testType: data.testType,
+        processingLab: data.processingLab,
+        invoice: data.invoice,
+        notes: data.notes,
+        sampleCollectionDate: data.sampleCollectionDate,
+        datePickedUpByLab: data.datePickedUpByLab,
+        dateShippedToLab: data.dateShippedToLab,
+        reportCompletionDate: data.reportCompletionDate
+      }))
+
+      toast.success('Report updated successfully')
+    } catch (error) {
+      console.error('Error updating report:', error)
+      toast.error(error.message || 'Failed to update report')
+    }
   }
 
-  const handleUpdateFromView = (report) => {
-    setSelectedReport(report)
-    setViewMode("update_from_view")
-  }
+  const handleDeleteReport = async (reportId) => {
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .delete()
+        .eq('id', reportId)
 
-  const handleDeleteReport = (reportId) => {
-    console.log("Delete report:", reportId)
-  }
+      if (error) throw error
 
-  const handleReportUpdateSubmit = (data) => {
-    console.log("Update report:", data)
-    // Here you would typically make an API call to update the report
-    const updatedReport = { ...selectedReport, ...data }
-    setSelectedReport(updatedReport)
-    
-    // Return to the appropriate view based on where the update was initiated
-    if (viewMode === "update_from_table") {
-      setViewMode("patient")
-    } else {
-      setViewMode("report")
+      // If we're deleting the currently selected report, go back to patient view
+      if (selectedReport?.id === reportId) {
+        setSelectedReport(null)
+        setViewMode("patient")
+      }
+
+      toast.success('Report deleted successfully')
+    } catch (error) {
+      console.error('Error deleting report:', error)
+      toast.error(error.message || 'Failed to delete report')
     }
   }
 
   const handleBack = () => {
-    if (viewMode === "update_from_table") {
+    if (viewMode === "report") {
       setViewMode("patient")
-    } else if (viewMode === "update_from_view") {
-      setViewMode("report")
-    } else if (viewMode === "report") {
-      setViewMode("patient")
+      // Navigate back to patient view
+      navigate(`/patients/${patient.id}`, { replace: true })
     } else {
-      onBack()
+      navigate('/patients')
     }
-  }
-
-  if (viewMode === "update_from_table" && selectedReport) {
-    return (
-      <ReportUpdate 
-        report={selectedReport}
-        patient={patient}
-        onBack={handleBack}
-        onSubmit={handleReportUpdateSubmit}
-        onCancel={handleBack}
-        isTableUpdate={true}
-      />
-    )
-  }
-
-  if (viewMode === "update_from_view" && selectedReport) {
-    return (
-      <ReportUpdate 
-        report={selectedReport}
-        patient={patient}
-        onBack={handleBack}
-        onSubmit={handleReportUpdateSubmit}
-        onCancel={handleBack}
-        isTableUpdate={false}
-      />
-    )
   }
 
   if (viewMode === "report" && selectedReport) {
@@ -106,8 +186,8 @@ export default function PatientView({ patient, onBack, onUpdate, onDelete }) {
         report={selectedReport}
         patient={patient}
         onBack={handleBack}
-        onUpdate={() => handleUpdateFromView(selectedReport)}
-        onDelete={() => handleDeleteReport(selectedReport.id)}
+        onUpdate={handleUpdateReport}
+        onDelete={handleDeleteReport}
       />
     )
   }
@@ -156,9 +236,6 @@ export default function PatientView({ patient, onBack, onUpdate, onDelete }) {
                 <CardTitle className="text-xl sm:text-2xl mb-1">
                   {patient.first_name} {patient.last_name}
                 </CardTitle>
-                <CardDescription className="text-sm">
-                  Reference ID: {patient.reference_id || 'Not assigned'}
-                </CardDescription>
               </div>
             </div>
           </CardHeader>
@@ -192,8 +269,6 @@ export default function PatientView({ patient, onBack, onUpdate, onDelete }) {
         <PatientReports 
           patient={patient}
           onViewReport={handleViewReport}
-          onUpdateReport={handleUpdateFromTable}
-          onDeleteReport={handleDeleteReport}
         />
       </div>
     </div>

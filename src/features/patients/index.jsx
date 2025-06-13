@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { useNavigate, useParams, useLocation } from "react-router-dom"
 import PageLayout from "@/components/layouts/PageLayout"
 import { Card, CardContent } from "@/components/ui/card"
 import { Loader } from "@/components/shared/loader"
@@ -23,6 +24,9 @@ import {
 const GENDERS = ["Male", "Female", "Other"]
 
 export default function Patients() {
+  const navigate = useNavigate()
+  const { patientId, reportId } = useParams()
+  const location = useLocation()
   const [isLoading, setIsLoading] = useState(true)
   const [patients, setPatients] = useState([])
   const [searchQuery, setSearchQuery] = useState("")
@@ -42,6 +46,22 @@ export default function Patients() {
   useEffect(() => {
     fetchPatients()
   }, [])
+
+  useEffect(() => {
+    // Reset view mode when URL changes to /patients
+    if (location.pathname === '/patients') {
+      setViewMode("list")
+      setSelectedPatient(null)
+    } else if (patientId) {
+      // Find the patient with the matching ID
+      const patient = patients.find(p => p.id === patientId)
+      if (patient) {
+        setSelectedPatient(patient)
+        // If there's a reportId in the URL, we'll let PatientView handle it
+        setViewMode("view")
+      }
+    }
+  }, [location.pathname, patientId, reportId, patients])
 
   const fetchPatients = async () => {
     try {
@@ -227,8 +247,11 @@ export default function Patients() {
   }
 
   const handleView = (patient) => {
-    setSelectedPatient(patient)
-    setViewMode("view")
+    navigate(`/patients/${patient.id}`)
+  }
+
+  const handleBack = () => {
+    navigate('/patients')
   }
 
   const handleUpdateFromList = (patient) => {
@@ -241,6 +264,14 @@ export default function Patients() {
     console.log('Update from details:', patient) // Debug log
     setSelectedPatient(patient)
     setIsUpdateDialogOpen(true)
+  }
+
+  const handleCancelUpdate = () => {
+    setIsUpdateDialogOpen(false)
+    // Don't reset selectedPatient if we're in view mode
+    if (viewMode !== "view") {
+      setSelectedPatient(null)
+    }
   }
 
   const handleUpdateSubmit = async (data) => {
@@ -293,7 +324,7 @@ export default function Patients() {
       
       setIsUpdateDialogOpen(false)
       
-      // If we're in details view, update the selected patient
+      // Always update the selected patient if we're in view mode
       if (viewMode === "view") {
         setSelectedPatient(updatedPatient)
       } else {
@@ -412,11 +443,6 @@ export default function Patients() {
     setIsAddDialogOpen(false)
   }
 
-  const handleCancelUpdate = () => {
-    setIsUpdateDialogOpen(false)
-    setSelectedPatient(null)
-  }
-
   const filteredAndSortedPatients = patients
     .filter(patient => {
       if (searchQuery) {
@@ -490,10 +516,7 @@ export default function Patients() {
           {viewMode === "view" && selectedPatient && (
             <PatientView
               patient={selectedPatient}
-              onBack={() => {
-                setViewMode("list")
-                setSelectedPatient(null)
-              }}
+              onBack={handleBack}
               onUpdate={() => handleUpdateFromDetails(selectedPatient)}
               onDelete={() => {
                 console.log('Delete clicked from details for patient:', selectedPatient)
@@ -518,7 +541,10 @@ export default function Patients() {
             onCancel={handleCancelUpdate}
             mode="update"
             open={isUpdateDialogOpen}
-            onOpenChange={setIsUpdateDialogOpen}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) handleCancelUpdate()
+              setIsUpdateDialogOpen(isOpen)
+            }}
           />
         </Card>
       </div>

@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useState, useEffect, useMemo } from "react"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -40,15 +40,44 @@ import {
   IconTrash,
   IconChevronUp,
   IconChevronDown,
-  IconDotsVertical
+  IconDotsVertical,
+  IconArrowsSort,
+  IconArrowUp,
+  IconArrowDown
 } from "@tabler/icons-react"
 import { supabase } from "@/lib/supabaseClient"
-import { toast } from "sonner"
+import { toast } from "react-hot-toast"
 import ReportForm from "./ReportForm"
+import { Separator } from "@/components/ui/separator"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
-const STATUS_TYPES = ["Pending", "Processing", "Completed", "Cancelled"]
-const LAB_TEST_TYPES = ["Blood", "Urine", "COVID-19", "DNA"]
-const PROCESSING_LABS = ["Lab A", "Lab B", "Lab C"]
+const STATUS_TYPES = [
+  "Sample Received",
+  "Resample Required",
+  "In Progress",
+  "Ready"
+]
+const LAB_TEST_TYPES = [
+  "Blood",
+  "Urine",
+  "COVID-19",
+  "DNA"
+]
+const PROCESSING_LABS = [
+  "Central Lab",
+  "East Lab",
+  "West Lab",
+  "North Lab"
+]
 
 export default function PatientReports({ patient, onViewReport, onUpdateReport, onDeleteReport }) {
   const [searchQuery, setSearchQuery] = useState("")
@@ -66,6 +95,8 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
   })
   const [reports, setReports] = useState([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [reportToDelete, setReportToDelete] = useState(null)
 
   useEffect(() => {
     fetchReports()
@@ -74,8 +105,6 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
   const fetchReports = async () => {
     try {
       setIsLoading(true)
-      console.log('Fetching reports for patient:', patient.id)
-      
       const { data, error } = await supabase
         .from('reports')
         .select(`
@@ -85,37 +114,42 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
           processing_lab,
           created_at,
           invoice_number,
+          tracking_number,
           notes,
           pdf_url,
           clinic_id,
+          sample_collection_date,
+          date_picked_up_by_lab,
+          date_shipped_to_lab,
+          report_completion_date,
           clinics!reports_clinic_id_fkey (
+            id,
             name
           )
         `)
         .eq('patient_id', patient.id)
         .order('created_at', { ascending: false })
 
-      if (error) {
-        console.error('Supabase error:', error)
-        throw error
-      }
+      if (error) throw error
 
-      console.log('Raw reports data:', data)
-
-      // Transform the data to match the UI format
+      // Transform the data to match the UI format - simplified for better performance
       const transformedReports = data.map(report => ({
         id: report.id,
         testStatus: report.status,
+        clinic_id: report.clinic_id,
         associatedClinic: report.clinics?.name || 'N/A',
         testType: report.lab_test_type,
-        reportCompletionDate: report.created_at,
         processingLab: report.processing_lab,
         invoice: report.invoice_number,
+        trackingNumber: report.tracking_number,
         notes: report.notes,
-        pdfUrl: report.pdf_url
+        pdfUrl: report.pdf_url,
+        sampleCollectionDate: report.sample_collection_date,
+        datePickedUpByLab: report.date_picked_up_by_lab,
+        dateShippedToLab: report.date_shipped_to_lab,
+        reportCompletionDate: report.report_completion_date || report.created_at
       }))
 
-      console.log('Transformed reports:', transformedReports)
       setReports(transformedReports)
     } catch (error) {
       console.error('Error fetching reports:', error)
@@ -132,155 +166,69 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
     }))
   }
 
-  const handleAddReport = () => {
-    setSelectedReport(null)
-    setIsAddDialogOpen(true)
-  }
-
-  const handleUpdateReport = (report) => {
-    setSelectedReport(report)
-    setIsUpdateDialogOpen(true)
-  }
-
-  const handleAddReportSubmit = async (data) => {
-    try {
-      const { data: newReport, error } = await supabase
-        .from('reports')
-        .insert([{
-          patient_id: patient.id,
-          status: data.testStatus,
-          lab_test_type: data.testType,
-          processing_lab: data.processingLab,
-          invoice_number: data.invoice,
-          notes: data.notes,
-          created_at: new Date().toISOString()
-        }])
-        .select()
-        .single()
-
-      if (error) throw error
-
-      // Refresh reports after adding
-      await fetchReports()
-      setIsAddDialogOpen(false)
-      toast.success('Report added successfully')
-    } catch (error) {
-      console.error('Error adding report:', error)
-      toast.error('Failed to add report')
-    }
-  }
-
-  const handleUpdateReportSubmit = async (data) => {
-    try {
-      const { error } = await supabase
-        .from('reports')
-        .update({
-          status: data.testStatus,
-          lab_test_type: data.testType,
-          processing_lab: data.processingLab,
-          invoice_number: data.invoice,
-          notes: data.notes
-        })
-        .eq('id', selectedReport.id)
-
-      if (error) throw error
-
-      // Refresh reports after updating
-      await fetchReports()
-      setIsUpdateDialogOpen(false)
-      setSelectedReport(null)
-      toast.success('Report updated successfully')
-    } catch (error) {
-      console.error('Error updating report:', error)
-      toast.error('Failed to update report')
-    }
-  }
-
-  const handleDeleteReport = async (reportId) => {
-    try {
-      const { error } = await supabase
-        .from('reports')
-        .delete()
-        .eq('id', reportId)
-
-      if (error) throw error
-
-      // Refresh reports after deleting
-      await fetchReports()
-      toast.success('Report deleted successfully')
-    } catch (error) {
-      console.error('Error deleting report:', error)
-      toast.error('Failed to delete report')
-    }
-  }
-
-  const handleCancelAdd = () => {
-    setIsAddDialogOpen(false)
-  }
-
-  const handleCancelUpdate = () => {
-    setIsUpdateDialogOpen(false)
-    setSelectedReport(null)
-  }
-
   const handleSort = (key) => {
-    let direction = 'ascending'
-    if (sortConfig.key === key && sortConfig.direction === 'ascending') {
-      direction = 'descending'
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'ascending' ? 'descending' : 'ascending'
+    }))
+  }
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) return <IconArrowsSort className="h-4 w-4 ml-1" />
+    return sortConfig.direction === 'ascending' 
+      ? <IconArrowUp className="h-4 w-4 ml-1" />
+      : <IconArrowDown className="h-4 w-4 ml-1" />
+  }
+
+  const filteredAndSortedReports = useMemo(() => {
+    let result = [...reports]
+
+    // Apply search
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      result = result.filter(report => 
+        (report.associatedClinic || '').toLowerCase().includes(query) ||
+        (report.testType || '').toLowerCase().includes(query) ||
+        (report.processingLab || '').toLowerCase().includes(query) ||
+        (report.invoice || '').toLowerCase().includes(query)
+      )
     }
-    setSortConfig({ key, direction })
-  }
 
-  const getSortedReports = (reports) => {
-    if (!sortConfig.key) return reports
+    // Apply filters
+    if (filters.testStatus !== "all") {
+      result = result.filter(report => (report.testStatus || '').toUpperCase() === filters.testStatus.toUpperCase())
+    }
+    if (filters.testType !== "all") {
+      result = result.filter(report => (report.testType || '').toUpperCase() === filters.testType.toUpperCase())
+    }
+    if (filters.processingLab !== "all") {
+      result = result.filter(report => (report.processingLab || '').toUpperCase() === filters.processingLab.toUpperCase())
+    }
 
-    return [...reports].sort((a, b) => {
-      if (a[sortConfig.key] < b[sortConfig.key]) {
-        return sortConfig.direction === 'ascending' ? -1 : 1
-      }
-      if (a[sortConfig.key] > b[sortConfig.key]) {
-        return sortConfig.direction === 'ascending' ? 1 : -1
-      }
-      return 0
-    })
-  }
+    // Apply sorting
+    if (sortConfig.key) {
+      result.sort((a, b) => {
+        const aValue = a[sortConfig.key]
+        const bValue = b[sortConfig.key]
 
-  const filteredReports = reports
-    .filter(report => {
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase()
-        return (
-          (report.associatedClinic || '').toLowerCase().includes(query) ||
-          (report.testType || '').toLowerCase().includes(query) ||
-          (report.processingLab || '').toLowerCase().includes(query) ||
-          (report.invoice || '').toLowerCase().includes(query)
-        )
-      }
-      return true
-    })
-    .filter(report => {
-      if (filters.testStatus !== "all") {
-        return (report.testStatus || '').toUpperCase() === filters.testStatus.toUpperCase()
-      }
-      return true
-    })
-    .filter(report => {
-      if (filters.testType !== "all") {
-        return (report.testType || '').toUpperCase() === filters.testType.toUpperCase()
-      }
-      return true
-    })
-    .filter(report => {
-      if (filters.processingLab !== "all") {
-        return (report.processingLab || '').toUpperCase() === filters.processingLab.toUpperCase()
-      }
-      return true
-    })
+        if (aValue === null || aValue === undefined) return 1
+        if (bValue === null || bValue === undefined) return -1
 
-  const sortedReports = getSortedReports(filteredReports)
+        if (aValue < bValue) {
+          return sortConfig.direction === 'ascending' ? -1 : 1
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'ascending' ? 1 : -1
+        }
+        return 0
+      })
+    }
+
+    return result
+  }, [reports, filters, sortConfig, searchQuery])
 
   const getStatusColor = (status) => {
-    switch (status) {
+    switch (status?.toUpperCase()) {
       case "COMPLETED":
         return "bg-green-500/10 text-green-500"
       case "PROCESSING":
@@ -292,6 +240,244 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
       default:
         return "bg-gray-500/10 text-gray-500"
     }
+  }
+
+  const handleAddReport = () => {
+    setSelectedReport(null)
+    setIsAddDialogOpen(true)
+  }
+
+  const handleUpdateReport = (report) => {
+    // Transform the report data to match the form fields - simplified
+    const transformedReport = {
+      ...report,
+      clinic_id: report.clinic_id,
+      testStatus: report.testStatus,
+      testType: report.testType,
+      processingLab: report.processingLab,
+      invoice: report.invoice,
+      trackingNumber: report.trackingNumber,
+      notes: report.notes || '',
+      sampleCollectionDate: report.sampleCollectionDate,
+      datePickedUpByLab: report.datePickedUpByLab,
+      dateShippedToLab: report.dateShippedToLab,
+      reportCompletionDate: report.reportCompletionDate
+    }
+    setSelectedReport(transformedReport)
+    setIsUpdateDialogOpen(true)
+  }
+
+  const handleDeleteReport = async (reportId) => {
+    setReportToDelete(reportId)
+    setIsDeleteDialogOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!reportToDelete) return
+
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .delete()
+        .eq('id', reportToDelete)
+
+      if (error) throw error
+
+      // Remove the report from the local state
+      setReports(prev => prev.filter(report => report.id !== reportToDelete))
+      toast.success('Report deleted successfully')
+    } catch (error) {
+      console.error('Error deleting report:', error)
+      toast.error(error.message || 'Failed to delete report')
+    } finally {
+      setIsDeleteDialogOpen(false)
+      setReportToDelete(null)
+    }
+  }
+
+  const handleAddReportSubmit = async (data) => {
+    try {
+      // First, get the clinic information
+      const { data: clinicData, error: clinicError } = await supabase
+        .from('clinics')
+        .select('name')
+        .eq('id', data.clinic_id)
+        .single()
+
+      if (clinicError) throw clinicError
+
+      // Format dates for database
+      const formatDate = (dateStr) => {
+        if (!dateStr) return null
+        try {
+          const date = new Date(dateStr)
+          return date.toISOString()
+        } catch (error) {
+          console.error('Error formatting date:', error)
+          return null
+        }
+      }
+
+      const { data: newReport, error } = await supabase
+        .from('reports')
+        .insert([{
+          patient_id: patient.id,
+          clinic_id: data.clinic_id,
+          reference_id: data.reference_id,
+          status: data.testStatus,
+          lab_test_type: data.testType,
+          processing_lab: data.processingLab,
+          invoice_number: data.invoice,
+          tracking_number: data.trackingNumber,
+          notes: data.notes,
+          sample_collection_date: formatDate(data.sampleCollectionDate),
+          date_picked_up_by_lab: formatDate(data.datePickedUpByLab),
+          date_shipped_to_lab: formatDate(data.dateShippedToLab),
+          report_completion_date: formatDate(data.reportCompletionDate),
+          created_at: new Date().toISOString(),
+          last_modified: new Date().toISOString()
+        }])
+        .select(`
+          id,
+          reference_id,
+          status,
+          lab_test_type,
+          processing_lab,
+          created_at,
+          invoice_number,
+          tracking_number,
+          notes,
+          pdf_url,
+          clinic_id,
+          sample_collection_date,
+          date_picked_up_by_lab,
+          date_shipped_to_lab,
+          report_completion_date,
+          clinics!reports_clinic_id_fkey (
+            name
+          )
+        `)
+        .single()
+
+      if (error) {
+        console.error('Error inserting report:', error)
+        throw error
+      }
+
+      console.log('New report data:', newReport)
+
+      // Transform the new report to match the UI format
+      const transformedReport = {
+        id: newReport.id,
+        reference_id: newReport.reference_id,
+        testStatus: newReport.status,
+        associatedClinic: newReport.clinics?.name || 'N/A',
+        testType: newReport.lab_test_type,
+        reportCompletionDate: newReport.report_completion_date,
+        sampleCollectionDate: newReport.sample_collection_date,
+        datePickedUpByLab: newReport.date_picked_up_by_lab,
+        dateShippedToLab: newReport.date_shipped_to_lab,
+        processingLab: newReport.processing_lab,
+        invoice: newReport.invoice_number,
+        trackingNumber: newReport.tracking_number,
+        notes: newReport.notes,
+        pdfUrl: newReport.pdf_url,
+        clinic_id: newReport.clinic_id
+      }
+
+      console.log('Transformed report:', transformedReport)
+
+      // Update the reports list with the new report at the beginning
+      setReports(prev => [transformedReport, ...prev])
+      setIsAddDialogOpen(false)
+      toast.success('Report added successfully')
+    } catch (error) {
+      console.error('Error adding report:', error)
+      toast.error(error.message || 'Failed to add report')
+    }
+  }
+
+  const handleUpdateReportSubmit = async (data) => {
+    try {
+      setIsLoading(true)
+      const { data: updatedReport, error } = await supabase
+        .from('reports')
+        .update({
+          status: data.testStatus,
+          clinic_id: data.clinic_id,
+          lab_test_type: data.testType,
+          processing_lab: data.processingLab,
+          invoice_number: data.invoice,
+          notes: data.notes,
+          sample_collection_date: data.sampleCollectionDate,
+          date_picked_up_by_lab: data.datePickedUpByLab,
+          date_shipped_to_lab: data.dateShippedToLab,
+          report_completion_date: data.reportCompletionDate,
+          last_modified: new Date().toISOString()
+        })
+        .eq('id', selectedReport.id)
+        .select(`
+          id,
+          status,
+          lab_test_type,
+          processing_lab,
+          created_at,
+          invoice_number,
+          tracking_number,
+          notes,
+          pdf_url,
+          clinic_id,
+          sample_collection_date,
+          date_picked_up_by_lab,
+          date_shipped_to_lab,
+          report_completion_date,
+          clinics!reports_clinic_id_fkey (
+            id,
+            name
+          )
+        `)
+        .single()
+
+      if (error) throw error
+
+      // Transform the updated report - simplified
+      const transformedReport = {
+        id: updatedReport.id,
+        testStatus: updatedReport.status,
+        clinic_id: updatedReport.clinic_id,
+        associatedClinic: updatedReport.clinics?.name || 'N/A',
+        testType: updatedReport.lab_test_type,
+        processingLab: updatedReport.processing_lab,
+        invoice: updatedReport.invoice_number,
+        trackingNumber: updatedReport.tracking_number,
+        notes: updatedReport.notes,
+        pdfUrl: updatedReport.pdf_url,
+        sampleCollectionDate: updatedReport.sample_collection_date,
+        datePickedUpByLab: updatedReport.date_picked_up_by_lab,
+        dateShippedToLab: updatedReport.date_shipped_to_lab,
+        reportCompletionDate: updatedReport.report_completion_date
+      }
+
+      setReports(prev => prev.map(report => 
+        report.id === selectedReport.id ? transformedReport : report
+      ))
+      setIsUpdateDialogOpen(false)
+      toast.success('Report updated successfully')
+    } catch (error) {
+      console.error('Error updating report:', error)
+      toast.error(error.message || 'Failed to update report')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleCancelAdd = () => {
+    setIsAddDialogOpen(false)
+  }
+
+  const handleCancelUpdate = () => {
+    setIsUpdateDialogOpen(false)
+    setSelectedReport(null)
   }
 
   const handleExportReports = () => {
@@ -308,14 +494,14 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
     ]
 
     // Convert report data to CSV rows
-    const rows = filteredReports.map(report => [
+    const rows = filteredAndSortedReports.map(report => [
       report.id,
       report.testStatus,
       report.associatedClinic,
       report.testType,
       new Date(report.reportCompletionDate).toLocaleDateString(),
       report.processingLab,
-      report.invoice || 'N/A',
+      report.invoice,
       report.notes || 'N/A'
     ])
 
@@ -351,13 +537,13 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
 
   return (
     <>
-      <Card className="w-full overflow-auto">
+      <Card className="overflow-hidden">
         <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 px-3 sm:px-6">
           <div>
             <CardTitle className="text-lg">Reports</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              {sortedReports.length} reports
-            </p>
+            <CardDescription className="text-sm">
+              {filteredAndSortedReports.length} reports
+            </CardDescription>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button size="sm" className="w-full sm:w-auto" onClick={handleAddReport}>
@@ -371,10 +557,11 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
               className="w-full sm:w-auto"
             >
               <IconDownload className="h-4 w-4 mr-2" />
-              Export Reports
+              Export
             </Button>
           </div>
         </CardHeader>
+        <Separator />
         <CardContent className="p-0">
           <div className="border-t">
             {/* Search and Filters */}
@@ -382,7 +569,7 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
               <div className="relative">
                 <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Search reports..."
+                  placeholder="Search reports by clinic, test type, or processing lab..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9"
@@ -444,106 +631,104 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
 
             <div className="overflow-x-auto">
               <div className="min-w-[800px]">
+                {filteredAndSortedReports.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <p className="text-lg font-medium text-muted-foreground">No reports found</p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {searchQuery || Object.values(filters).some(v => v !== 'all') 
+                        ? 'Try adjusting your search or filters'
+                        : 'Add your first report using the "Add Report" button above'}
+                    </p>
+                  </div>
+                ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead 
-                        className="cursor-pointer"
+                          className="whitespace-nowrap cursor-pointer group"
                         onClick={() => handleSort('testStatus')}
                       >
-                        <div className="flex items-center gap-1">
+                          <div className="flex items-center">
                           Test Status
-                          {sortConfig.key === 'testStatus' && (
-                            sortConfig.direction === 'ascending' 
-                              ? <IconChevronUp className="h-4 w-4" />
-                              : <IconChevronDown className="h-4 w-4" />
-                          )}
+                            <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {getSortIcon('testStatus')}
+                            </span>
                         </div>
                       </TableHead>
                       <TableHead 
-                        className="cursor-pointer"
+                          className="whitespace-nowrap cursor-pointer group"
                         onClick={() => handleSort('associatedClinic')}
                       >
-                        <div className="flex items-center gap-1">
+                          <div className="flex items-center">
                           Associated Clinic
-                          {sortConfig.key === 'associatedClinic' && (
-                            sortConfig.direction === 'ascending' 
-                              ? <IconChevronUp className="h-4 w-4" />
-                              : <IconChevronDown className="h-4 w-4" />
-                          )}
+                            <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {getSortIcon('associatedClinic')}
+                            </span>
                         </div>
                       </TableHead>
                       <TableHead 
-                        className="cursor-pointer"
+                          className="whitespace-nowrap cursor-pointer group"
                         onClick={() => handleSort('testType')}
                       >
-                        <div className="flex items-center gap-1">
+                          <div className="flex items-center">
                           Test Type
-                          {sortConfig.key === 'testType' && (
-                            sortConfig.direction === 'ascending' 
-                              ? <IconChevronUp className="h-4 w-4" />
-                              : <IconChevronDown className="h-4 w-4" />
-                          )}
+                            <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {getSortIcon('testType')}
+                            </span>
                         </div>
                       </TableHead>
                       <TableHead 
-                        className="cursor-pointer"
+                          className="whitespace-nowrap cursor-pointer group"
                         onClick={() => handleSort('reportCompletionDate')}
                       >
-                        <div className="flex items-center gap-1">
-                          Report Completion Date
-                          {sortConfig.key === 'reportCompletionDate' && (
-                            sortConfig.direction === 'ascending' 
-                              ? <IconChevronUp className="h-4 w-4" />
-                              : <IconChevronDown className="h-4 w-4" />
-                          )}
+                          <div className="flex items-center">
+                            Completion Date
+                            <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {getSortIcon('reportCompletionDate')}
+                            </span>
                         </div>
                       </TableHead>
                       <TableHead 
-                        className="cursor-pointer"
+                          className="whitespace-nowrap cursor-pointer group"
                         onClick={() => handleSort('processingLab')}
                       >
-                        <div className="flex items-center gap-1">
+                          <div className="flex items-center">
                           Processing Lab
-                          {sortConfig.key === 'processingLab' && (
-                            sortConfig.direction === 'ascending' 
-                              ? <IconChevronUp className="h-4 w-4" />
-                              : <IconChevronDown className="h-4 w-4" />
-                          )}
+                            <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {getSortIcon('processingLab')}
+                            </span>
                         </div>
                       </TableHead>
                       <TableHead 
-                        className="cursor-pointer"
+                          className="whitespace-nowrap cursor-pointer group"
                         onClick={() => handleSort('invoice')}
                       >
-                        <div className="flex items-center gap-1">
+                          <div className="flex items-center">
                           Invoice
-                          {sortConfig.key === 'invoice' && (
-                            sortConfig.direction === 'ascending' 
-                              ? <IconChevronUp className="h-4 w-4" />
-                              : <IconChevronDown className="h-4 w-4" />
-                          )}
+                            <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              {getSortIcon('invoice')}
+                            </span>
                         </div>
                       </TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
+                        <TableHead className="text-right whitespace-nowrap">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {sortedReports.map((report) => (
+                      {filteredAndSortedReports.map((report) => (
                       <TableRow key={report.id}>
-                        <TableCell>
+                          <TableCell className="whitespace-nowrap">
                           <Badge className={getStatusColor(report.testStatus)}>
                             {report.testStatus}
                           </Badge>
                         </TableCell>
-                        <TableCell>{report.associatedClinic}</TableCell>
-                        <TableCell>{report.testType}</TableCell>
-                        <TableCell>
+                          <TableCell className="whitespace-nowrap">{report.associatedClinic}</TableCell>
+                          <TableCell className="whitespace-nowrap">{report.testType}</TableCell>
+                          <TableCell className="whitespace-nowrap">
                           {new Date(report.reportCompletionDate).toLocaleDateString()}
                         </TableCell>
-                        <TableCell>{report.processingLab}</TableCell>
-                        <TableCell>{report.invoice}</TableCell>
-                        <TableCell className="text-right">
+                          <TableCell className="whitespace-nowrap">{report.processingLab}</TableCell>
+                          <TableCell className="whitespace-nowrap">{report.invoice}</TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" className="h-8 w-8 p-0">
@@ -571,6 +756,7 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
                     ))}
                   </TableBody>
                 </Table>
+                )}
               </div>
             </div>
           </div>
@@ -597,6 +783,24 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
         open={isUpdateDialogOpen}
         onOpenChange={setIsUpdateDialogOpen}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the report.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 } 

@@ -16,9 +16,20 @@ import {
 } from "@/components/ui/dialog"
 import ReportForm from "./ReportForm"
 import { useState } from "react"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 export default function ReportDetails({ report, patient, onBack, onUpdate, onDelete }) {
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -38,6 +49,11 @@ export default function ReportDetails({ report, patient, onBack, onUpdate, onDel
   const handleUpdateSubmit = (data) => {
     onUpdate(data)
     setIsUpdateDialogOpen(false)
+  }
+
+  const handleDelete = () => {
+    onDelete(report.id)
+    setIsDeleteDialogOpen(false)
   }
 
   return (
@@ -63,7 +79,7 @@ export default function ReportDetails({ report, patient, onBack, onUpdate, onDel
           </Button>
           <Button 
             variant="destructive" 
-            onClick={onDelete} 
+            onClick={() => setIsDeleteDialogOpen(true)} 
             className="text-sm w-full sm:w-auto"
           >
             <IconTrash className="h-4 w-4 mr-2" />
@@ -81,39 +97,52 @@ export default function ReportDetails({ report, patient, onBack, onUpdate, onDel
                 <CardTitle className="text-xl sm:text-2xl mb-1">
                   {patient.first_name} {patient.last_name}
                 </CardTitle>
-                <CardDescription>
+                <div className="mt-1">
                   <Badge className={getStatusColor(report.testStatus)}>
                     {report.testStatus}
                   </Badge>
-                </CardDescription>
+                </div>
               </div>
             </div>
           </CardHeader>
           <Separator />
           <CardContent className="pt-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-semibold mb-1">Clinic Name</h3>
-                  <p className="text-sm text-muted-foreground">{report.associatedClinic}</p>
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold mb-1">Patient First Name</h3>
-                  <p className="text-sm text-muted-foreground">{patient.first_name}</p>
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold mb-1">Patient Last Name</h3>
-                  <p className="text-sm text-muted-foreground">{patient.last_name}</p>
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold mb-1">Processing Lab</h3>
-                  <p className="text-sm text-muted-foreground">{report.processingLab}</p>
-                </div>
-                <div>
-                  <h3 className="text-sm font-semibold mb-1">Invoice #</h3>
-                  <p className="text-sm text-muted-foreground">{report.invoice}</p>
-                </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Clinic Name</h3>
+                <p className="text-sm text-muted-foreground">{report.associatedClinic}</p>
               </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Patient First Name</h3>
+                <p className="text-sm text-muted-foreground">{patient.first_name}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Patient Last Name</h3>
+                <p className="text-sm text-muted-foreground">{patient.last_name}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Processing Lab</h3>
+                <p className="text-sm text-muted-foreground">{report.processingLab}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Invoice #</h3>
+                <p className="text-sm text-muted-foreground">{report.invoice}</p>
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold mb-1">Test Type</h3>
+                <p className="text-sm text-muted-foreground">{report.testType}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Dates and Tracking */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Dates and Tracking</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold mb-1">Sample Collection Date</h3>
@@ -122,9 +151,9 @@ export default function ReportDetails({ report, patient, onBack, onUpdate, onDel
                   </p>
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold mb-1">Date Picked Up by LabLink</h3>
+                  <h3 className="text-sm font-semibold mb-1">Date Picked Up by Lab</h3>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(report.datePickedUp || report.reportCompletionDate).toLocaleDateString()}
+                    {new Date(report.datePickedUpByLab || report.reportCompletionDate).toLocaleDateString()}
                   </p>
                 </div>
                 <div>
@@ -134,7 +163,7 @@ export default function ReportDetails({ report, patient, onBack, onUpdate, onDel
                 <div>
                   <h3 className="text-sm font-semibold mb-1">Date Shipped to Lab</h3>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(report.dateShipped || report.reportCompletionDate).toLocaleDateString()}
+                    {new Date(report.dateShippedToLab || report.reportCompletionDate).toLocaleDateString()}
                   </p>
                 </div>
                 <div>
@@ -160,10 +189,14 @@ export default function ReportDetails({ report, patient, onBack, onUpdate, onDel
                 {report.notes || "No notes available."}
               </p>
             </div>
-            {report.reportPdf && (
+            {report.pdfUrl && (
               <div>
                 <h3 className="text-sm font-semibold mb-2">Report PDF</h3>
-                <Button variant="outline" className="w-full sm:w-auto">
+                <Button 
+                  variant="outline" 
+                  className="w-full sm:w-auto"
+                  onClick={() => window.open(report.pdfUrl, '_blank')}
+                >
                   <IconFileText className="h-4 w-4 mr-2" />
                   View Report PDF
                 </Button>
@@ -183,6 +216,24 @@ export default function ReportDetails({ report, patient, onBack, onUpdate, onDel
         open={isUpdateDialogOpen}
         onOpenChange={setIsUpdateDialogOpen}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the report.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 } 

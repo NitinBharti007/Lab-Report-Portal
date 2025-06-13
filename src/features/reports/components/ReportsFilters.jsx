@@ -24,7 +24,7 @@ export default function ReportsFilters({
       <div className="relative">
         <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search reports..."
+          placeholder="Search reports by patient name, clinic, or test type..."
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
           className="pl-9"

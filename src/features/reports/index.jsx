@@ -128,6 +128,40 @@ export default function Reports() {
     }
   }, [sortConfig, allReports, filters, searchQuery, pagination.page, pagination.pageSize])
 
+  // Handle direct URL visits and browser navigation
+  useEffect(() => {
+    const handlePopState = () => {
+      const path = window.location.pathname
+      const reportIdMatch = path.match(/\/reports\/(\d+)/)
+      
+      if (reportIdMatch) {
+        const reportId = reportIdMatch[1]
+        const report = allReports.find(r => r.id === reportId)
+        if (report) {
+          setSelectedReport(report)
+          setViewMode("view")
+        } else {
+          // If report not found, go back to list view
+          setViewMode("list")
+          setSelectedReport(null)
+        }
+      } else {
+        setViewMode("list")
+        setSelectedReport(null)
+      }
+    }
+
+    // Handle initial load
+    handlePopState()
+
+    // Add event listener for browser navigation
+    window.addEventListener('popstate', handlePopState)
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+    }
+  }, [allReports])
+
   const fetchReports = async () => {
     try {
       console.log('Starting fetchReports...')
@@ -282,11 +316,13 @@ export default function Reports() {
   const handleView = (report) => {
     setSelectedReport(report)
     setViewMode("view")
+    window.history.pushState({}, '', `/reports/${report.id}`)
   }
 
   const handleBack = () => {
     setViewMode("list")
     setSelectedReport(null)
+    window.history.pushState({}, '', '/reports')
   }
 
   const handleUpdate = (report) => {
