@@ -1,14 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Temporary hardcoded values for debugging
-const supabaseUrl = 'https://pxycafbswegyrxqiazsc.supabase.co'
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
-
-console.log('Environment variables:', {
-  url: supabaseUrl,
-  key: supabaseAnonKey,
-  allEnv: import.meta.env
-})
 
 if (!supabaseUrl || !supabaseAnonKey) {
   console.error('Missing environment variables:', {
@@ -22,38 +15,14 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    storageKey: 'labportal-auth-token',
-    storage: {
-      getItem: (key) => {
-        try {
-          const value = localStorage.getItem(key)
-          return value ? JSON.parse(value) : null
-        } catch (error) {
-          return null
-        }
-      },
-      setItem: (key, value) => {
-        try {
-          localStorage.setItem(key, JSON.stringify(value))
-        } catch (error) {
-          console.error('Error storing auth token:', error)
-        }
-      },
-      removeItem: (key) => {
-        try {
-          localStorage.removeItem(key)
-        } catch (error) {
-          console.error('Error removing auth token:', error)
-        }
-      }
-    }
+    storage: localStorage
   }
 })
 
-// Cache the session check
+// Cache the session check with a shorter duration
 let sessionCache = null
 let lastSessionCheck = 0
-const CACHE_DURATION = 5000 // 5 seconds
+const CACHE_DURATION = 2000 // Reduced to 2 seconds for more frequent checks
 
 export const getSession = async () => {
   const now = Date.now()
@@ -65,7 +34,10 @@ export const getSession = async () => {
 
   try {
     const { data: { session }, error } = await supabase.auth.getSession()
-    if (error) throw error
+    if (error) {
+      console.error('Session error:', error)
+      throw error
+    }
 
     // Update cache
     sessionCache = session
@@ -73,16 +45,20 @@ export const getSession = async () => {
     return session
   } catch (error) {
     console.error('Error getting session:', error)
+    sessionCache = null
+    lastSessionCheck = 0
     return null
   }
 }
 
-// Subscribe to auth state changes
+// Subscribe to auth state changes with improved error handling
 supabase.auth.onAuthStateChange((event, session) => {
+  console.log('Auth state changed:', event, session ? 'Session exists' : 'No session')
+  
   if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
     sessionCache = session
     lastSessionCheck = Date.now()
-  } else if (event === 'SIGNED_OUT') {
+  } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
     sessionCache = null
     lastSessionCheck = 0
   }

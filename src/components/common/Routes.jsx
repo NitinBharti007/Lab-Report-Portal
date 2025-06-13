@@ -16,7 +16,8 @@ import Unauthorized from "@/pages/Unauthorized";
 import { RoleProtectedRoute } from "./RoleProtectedRoute";
 import EmailVerificationCallback from "@/features/auth/EmailVerificationCallback";
 import { Loader } from "@/components/shared/loader";
-// import Team from "../../features/team";
+import ClinicReportDetails from "@/features/clinics/components/ClinicReportDetails";
+import PageLayout from "@/components/layouts/PageLayout";
 
 // Public Route component (redirects to dashboard if already logged in)
 const PublicRoute = ({ children }) => {
@@ -179,6 +180,16 @@ const AppRoutes = () => {
           element={
             <RoleProtectedRoute>
               <Reports />
+            </RoleProtectedRoute>
+          }
+        />
+        <Route
+          path="/reports/:reportId"
+          element={
+            <RoleProtectedRoute>
+              <PageLayout>
+                <ClinicReportDetails />
+              </PageLayout>
             </RoleProtectedRoute>
           }
         />

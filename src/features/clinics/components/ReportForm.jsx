@@ -30,6 +30,7 @@ import * as z from "zod"
 import { useEffect, useState } from "react"
 import { supabase } from "@/lib/supabaseClient"
 import { toast } from "react-hot-toast"
+import { Loader2 } from "lucide-react"
 
 // Form schema for report
 const reportFormSchema = z.object({
@@ -39,7 +40,7 @@ const reportFormSchema = z.object({
   processingLab: z.string().min(1, "Processing lab is required"),
   invoiceNumber: z.string().optional(),
   sampleCollectionDate: z.string().optional(),
-  datePickedUpByLabLink: z.string().min(1, "Date picked up by LabLink is required"),
+  datePickedUpByLab: z.string().min(1, "Date picked up by lab is required"),
   dateShippedToLab: z.string().optional(),
   trackingNumber: z.string().optional(),
   reportCompletionDate: z.string().optional(),
@@ -68,9 +69,64 @@ const PROCESSING_LABS = [
   "North Lab"
 ]
 
-export default function ReportForm({ isOpen, onClose, onSubmit }) {
+// Utility function to generate IDs
+const generateIds = async (patientId, type) => {
+  try {
+    // Get the latest report for reference ID
+    const { data: latestReport, error: reportError } = await supabase
+      .from('reports')
+      .select('reference_id, invoice_number, tracking_number')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (reportError && reportError.code !== 'PGRST116') throw reportError
+
+    // Generate reference ID
+    let nextRefNumber = 1
+    if (latestReport?.reference_id) {
+      const refMatch = latestReport.reference_id.match(/REP(\d+)/)
+      if (refMatch) {
+        nextRefNumber = parseInt(refMatch[1]) + 1
+      }
+    }
+    const referenceId = `REP${nextRefNumber.toString().padStart(3, '0')}`
+
+    // Generate invoice number
+    let nextInvNumber = 1
+    if (latestReport?.invoice_number) {
+      const invMatch = latestReport.invoice_number.match(/INV(\d+)/)
+      if (invMatch) {
+        nextInvNumber = parseInt(invMatch[1]) + 1
+      }
+    }
+    const invoiceNumber = `INV${nextInvNumber.toString().padStart(3, '0')}`
+
+    // Generate tracking number
+    let nextTrackNumber = 1
+    if (latestReport?.tracking_number) {
+      const trackMatch = latestReport.tracking_number.match(/TRACK(\d+)/)
+      if (trackMatch) {
+        nextTrackNumber = parseInt(trackMatch[1]) + 1
+      }
+    }
+    const trackingNumber = `TRACK${nextTrackNumber.toString().padStart(3, '0')}`
+
+    return {
+      referenceId,
+      invoiceNumber,
+      trackingNumber
+    }
+  } catch (error) {
+    console.error('Error generating IDs:', error)
+    throw error
+  }
+}
+
+export default function ReportForm({ isOpen, onClose, onSubmit, clinic }) {
   const [patients, setPatients] = useState([])
   const [isLoading, setIsLoading] = useState(false)
+  const [generatedIds, setGeneratedIds] = useState(null)
 
   const form = useForm({
     resolver: zodResolver(reportFormSchema),
@@ -81,109 +137,143 @@ export default function ReportForm({ isOpen, onClose, onSubmit }) {
       processingLab: "",
       invoiceNumber: "",
       sampleCollectionDate: "",
-      datePickedUpByLabLink: "",
+      datePickedUpByLab: "",
       dateShippedToLab: "",
       trackingNumber: "",
       reportCompletionDate: "",
-      reportPDF: null,
-      notes: "",
-    },
+      notes: ""
+    }
   })
 
+  // Fetch patients when form opens
   useEffect(() => {
-    fetchPatients()
-  }, [])
+    if (isOpen) {
+      fetchPatients()
+    }
+  }, [isOpen])
+
+  // Generate IDs when patient is selected
+  useEffect(() => {
+    const patientId = form.watch('patient')
+    if (patientId) {
+      generateIds(patientId).then(ids => {
+        setGeneratedIds(ids)
+        form.setValue('invoiceNumber', ids.invoiceNumber)
+        form.setValue('trackingNumber', ids.trackingNumber)
+      }).catch(error => {
+        console.error('Error generating IDs:', error)
+        toast.error('Failed to generate reference numbers')
+      })
+    }
+  }, [form.watch('patient')])
 
   const fetchPatients = async () => {
     try {
-      setIsLoading(true)
       const { data, error } = await supabase
         .from('patients')
-        .select('id, reference_id, first_name, last_name')
+        .select('id, first_name, last_name, reference_id')
         .order('created_at', { ascending: false })
 
       if (error) throw error
-
       setPatients(data || [])
     } catch (error) {
       console.error('Error fetching patients:', error)
       toast.error('Failed to fetch patients')
-    } finally {
-      setIsLoading(false)
     }
   }
 
   const handleSubmit = async (data) => {
     try {
-      // Convert empty date strings to null
-      const processedData = {
-        ...data,
-        sampleCollectionDate: data.sampleCollectionDate || null,
-        datePickedUpByLabLink: data.datePickedUpByLabLink || null,
-        dateShippedToLab: data.dateShippedToLab || null,
-        reportCompletionDate: data.reportCompletionDate || null,
+      setIsLoading(true)
+      let pdfUrl = null
+
+      // Handle PDF upload if provided
+      if (data.reportPDF) {
+        const file = data.reportPDF
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Date.now()}.${fileExt}`
+        const filePath = `reports/${fileName}`
+
+        const { error: uploadError } = await supabase.storage
+          .from('reports')
+          .upload(filePath, file)
+
+        if (uploadError) throw uploadError
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('reports')
+          .getPublicUrl(filePath)
+
+        pdfUrl = publicUrl
       }
-      await onSubmit(processedData)
+
+      // Convert empty date strings to null
+      const formatDate = (dateStr) => {
+        if (!dateStr) return null
+        return dateStr
+      }
+
+      // Prepare report data
+      const reportData = {
+        reference_id: generatedIds.referenceId,
+        testStatus: data.testStatus,
+        labTestType: data.labTestType,
+        processingLab: data.processingLab,
+        invoiceNumber: generatedIds.invoiceNumber,
+        sampleCollectionDate: formatDate(data.sampleCollectionDate),
+        datePickedUpByLab: formatDate(data.datePickedUpByLab),
+        dateShippedToLab: formatDate(data.dateShippedToLab),
+        trackingNumber: generatedIds.trackingNumber,
+        reportCompletionDate: formatDate(data.reportCompletionDate),
+        notes: data.notes || null,
+        pdf_url: pdfUrl,
+        patient: data.patient,
+        clinic_id: clinic.id
+      }
+
+      await onSubmit(reportData)
       form.reset()
-      onClose()
+      setGeneratedIds(null)
     } catch (error) {
-      console.error("Error submitting report form:", error)
-      toast.error("Failed to add report")
+      console.error('Error submitting report:', error)
+      toast.error('Failed to submit report')
+    } finally {
+      setIsLoading(false)
     }
   }
 
   const handleClose = () => {
     form.reset()
+    setGeneratedIds(null)
     onClose()
   }
 
   return (
     <Dialog open={isOpen} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Add Report</DialogTitle>
-          <DialogDescription>
-            Add a new report. Fill in the required information below.
+          <DialogTitle className="text-lg font-semibold">Add New Report</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Fill in the details to create a new report for {clinic?.name}.
           </DialogDescription>
         </DialogHeader>
+
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="testStatus"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Test Status <span className="text-red-500">*</span></FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select test status" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {TEST_STATUS.map((status) => (
-                          <SelectItem key={status} value={status}>
-                            {status}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="patient"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Patient <span className="text-red-500">*</span></FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormLabel className="text-sm font-medium">Patient <span className="text-destructive">*</span></FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select patient" />
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a patient" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -201,13 +291,44 @@ export default function ReportForm({ isOpen, onClose, onSubmit }) {
 
               <FormField
                 control={form.control}
+                name="testStatus"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Test Status <span className="text-destructive">*</span></FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {TEST_STATUS.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="labTestType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Lab Test Type <span className="text-red-500">*</span></FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormLabel className="text-sm font-medium">Test Type <span className="text-destructive">*</span></FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
                       <FormControl>
-                        <SelectTrigger>
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select test type" />
                         </SelectTrigger>
                       </FormControl>
@@ -229,11 +350,14 @@ export default function ReportForm({ isOpen, onClose, onSubmit }) {
                 name="processingLab"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Processing Lab <span className="text-red-500">*</span></FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormLabel className="text-sm font-medium">Processing Lab <span className="text-destructive">*</span></FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
                       <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select processing lab" />
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select lab" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
@@ -254,66 +378,9 @@ export default function ReportForm({ isOpen, onClose, onSubmit }) {
                 name="invoiceNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Invoice #</FormLabel>
+                    <FormLabel className="text-sm font-medium">Invoice Number</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter invoice number" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="sampleCollectionDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Sample Collection Date</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="date" 
-                        {...field} 
-                        value={field.value || ''}
-                        onChange={(e) => field.onChange(e.target.value || null)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="datePickedUpByLabLink"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Date Picked Up by LabLink <span className="text-red-500">*</span></FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="date" 
-                        {...field} 
-                        value={field.value || ''}
-                        onChange={(e) => field.onChange(e.target.value || null)}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="dateShippedToLab"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Date Shipped to Lab</FormLabel>
-                    <FormControl>
-                      <Input 
-                        type="date" 
-                        {...field} 
-                        value={field.value || ''}
-                        onChange={(e) => field.onChange(e.target.value || null)}
-                      />
+                      <Input {...field} disabled className="bg-muted" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -325,9 +392,51 @@ export default function ReportForm({ isOpen, onClose, onSubmit }) {
                 name="trackingNumber"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Tracking Number</FormLabel>
+                    <FormLabel className="text-sm font-medium">Tracking Number</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter tracking number" {...field} />
+                      <Input {...field} disabled className="bg-muted" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="sampleCollectionDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Sample Collection Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} className="w-full" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="datePickedUpByLab"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Date Picked Up by Lab<span className="text-destructive">*</span></FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} className="w-full" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="dateShippedToLab"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Date Shipped to Lab</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} className="w-full" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -339,14 +448,9 @@ export default function ReportForm({ isOpen, onClose, onSubmit }) {
                 name="reportCompletionDate"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Report Completion Date</FormLabel>
+                    <FormLabel className="text-sm font-medium">Report Completion Date</FormLabel>
                     <FormControl>
-                      <Input 
-                        type="date" 
-                        {...field} 
-                        value={field.value || ''}
-                        onChange={(e) => field.onChange(e.target.value || null)}
-                      />
+                      <Input type="date" {...field} className="w-full" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -358,12 +462,13 @@ export default function ReportForm({ isOpen, onClose, onSubmit }) {
                 name="reportPDF"
                 render={({ field: { value, onChange, ...field } }) => (
                   <FormItem>
-                    <FormLabel>Report PDF</FormLabel>
+                    <FormLabel className="text-sm font-medium">Report PDF</FormLabel>
                     <FormControl>
                       <Input
                         type="file"
                         accept=".pdf"
                         onChange={(e) => onChange(e.target.files[0])}
+                        className="w-full"
                         {...field}
                       />
                     </FormControl>
@@ -378,11 +483,11 @@ export default function ReportForm({ isOpen, onClose, onSubmit }) {
               name="notes"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Notes</FormLabel>
+                  <FormLabel className="text-sm font-medium">Notes</FormLabel>
                   <FormControl>
                     <Textarea
                       placeholder="Enter any additional notes"
-                      className="resize-none"
+                      className="resize-none min-h-[80px]"
                       {...field}
                     />
                   </FormControl>
@@ -400,8 +505,19 @@ export default function ReportForm({ isOpen, onClose, onSubmit }) {
               >
                 Cancel
               </Button>
-              <Button type="submit" className="w-full sm:w-auto">
-                Add Report
+              <Button 
+                type="submit" 
+                className="w-full sm:w-auto" 
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding Report...
+                  </>
+                ) : (
+                  'Add Report'
+                )}
               </Button>
             </DialogFooter>
           </form>

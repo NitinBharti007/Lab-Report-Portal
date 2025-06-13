@@ -17,7 +17,8 @@ import {
   IconArrowUp, 
   IconArrowDown, 
   IconArrowsSort,
-  IconSearch
+  IconSearch,
+  IconDotsVertical
 } from "@tabler/icons-react"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -203,104 +204,48 @@ export default function ClinicDetails({
   }
 
   const handleViewReport = (reportId) => {
-    const report = reports.find(r => r.id === reportId)
-    if (report) {
-      setSelectedReport(report)
-      setViewMode("view")
-    }
+    navigate(`/reports/${reportId}`)
   }
 
   const handleUpdateReport = (reportId) => {
     const report = reports.find(r => r.id === reportId)
     if (report) {
-      setSelectedReport(report)
+      // Transform the report data to match the form fields
+      const transformedReport = {
+        id: report.id,
+        status: report.testStatus,
+        patient_id: report.patient_id,
+        lab_test_type: report.testType,
+        processing_lab: report.processingLab,
+        invoice_number: report.invoice,
+        sample_collection_date: report.sampleCollectionDate,
+        date_picked_up_by_lab: report.datePickedUpByLab,
+        date_shipped_to_lab: report.dateShippedToLab,
+        tracking_number: report.trackingNumber,
+        report_completion_date: report.reportCompletionDate,
+        notes: report.notes,
+        pdf_url: report.pdfUrl,
+        created_at: report.createdAt,
+        last_modified: report.lastModified,
+        clinic_id: report.clinic_id,
+        // Add patient details for display
+        patients: {
+          first_name: report.firstName,
+          last_name: report.lastName
+        }
+      }
+      setSelectedReport(transformedReport)
       setIsUpdateDialogOpen(true)
     }
   }
 
-  const handleUpdateSuccess = async (updatedReport) => {
-    setIsUpdateDialogOpen(false)
-    
-    try {
-      // Fetch all reports for the clinic to ensure we have the complete list
-      const { data: allReports, error: fetchError } = await supabase
-        .from('reports')
-        .select(`
-          id,
-          reference_id,
-          status,
-          lab_test_type,
-          processing_lab,
-          invoice_number,
-          sample_collection_date,
-          date_picked_up_by_lab,
-          date_shipped_to_lab,
-          tracking_number,
-          report_completion_date,
-          notes,
-          pdf_url,
-          created_at,
-          last_modified,
-          patient_id,
-          clinic_id,
-          patients (
-            first_name,
-            last_name
-          )
-        `)
-        .eq('clinic_id', clinic.id)
-        .order('created_at', { ascending: false })
-
-      if (fetchError) throw fetchError
-
-      // Transform all reports for the UI
-      const transformedReports = allReports.map(report => ({
-        id: report.id,
-        referenceId: report.reference_id,
-        firstName: report.patients?.first_name || 'N/A',
-        lastName: report.patients?.last_name || 'N/A',
-        testStatus: report.status,
-        testType: report.lab_test_type,
-        processingLab: report.processing_lab,
-        invoice: report.invoice_number,
-        sampleCollectionDate: report.sample_collection_date,
-        datePickedUpByLab: report.date_picked_up_by_lab,
-        dateShippedToLab: report.date_shipped_to_lab,
-        trackingNumber: report.tracking_number,
-        reportCompletionDate: report.report_completion_date,
-        notes: report.notes,
-        pdfUrl: report.pdf_url,
-        createdAt: report.created_at,
-        lastModified: report.last_modified,
-        patient_id: report.patient_id,
-        clinic_id: report.clinic_id,
-        associatedClinic: clinic.name
-      }))
-
-      // Update the reports list immediately
-      setReports(transformedReports)
-
-      // If in view mode, update the selected report
-      if (viewMode === "view" && selectedReport) {
-        const updatedSelectedReport = transformedReports.find(r => r.id === selectedReport.id)
-        if (updatedSelectedReport) {
-          setSelectedReport(updatedSelectedReport)
-        }
-      }
-
-      // Notify parent component about the update with all reports
-      if (onUpdateReport) {
-        onUpdateReport(transformedReports.find(r => r.id === updatedReport.id))
-      }
-
-      // Only show success message if we're in view mode
-      if (viewMode === "view") {
-        toast.success('Report updated successfully')
-      }
-    } catch (error) {
-      console.error('Error updating report:', error)
-      toast.error('Failed to update report')
-    }
+  const handleUpdateSuccess = (updatedReport) => {
+    setClinic(prev => ({
+      ...prev,
+      reports: prev.reports.map(report => 
+        report.id === updatedReport.id ? updatedReport : report
+      )
+    }))
   }
 
   const handleDeleteReport = async (report) => {
@@ -777,9 +722,9 @@ export default function ClinicDetails({
               </Avatar>
               <div>
                 <CardTitle className="text-xl sm:text-2xl mb-1">{clinic.name}</CardTitle>
-                <CardDescription className="text-sm">
+                {/* <CardDescription className="text-sm">
                   Reference ID: {clinic.reference_id}
-                </CardDescription>
+                </CardDescription> */}
               </div>
             </div>
           </CardHeader>
@@ -880,7 +825,7 @@ export default function ClinicDetails({
                   <div className="relative">
                     <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder="Search reports..."
+                      placeholder="Search reports by name, test type, invoice or processing lab..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-9"
@@ -1063,7 +1008,7 @@ export default function ClinicDetails({
                                   <DropdownMenuTrigger asChild>
                                     <Button variant="ghost" className="h-8 w-8 p-0">
                                       <span className="sr-only">Open menu</span>
-                                      <IconPencil className="h-4 w-4" />
+                                      <IconDotsVertical className="h-4 w-4" />
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end">
@@ -1099,9 +1044,10 @@ export default function ClinicDetails({
       {selectedReport && (
         <UpdateClinicReportDialog
           report={selectedReport}
-          open={isUpdateDialogOpen}
-          onOpenChange={setIsUpdateDialogOpen}
-          onSuccess={handleUpdateSuccess}
+          isOpen={isUpdateDialogOpen}
+          onClose={() => setIsUpdateDialogOpen(false)}
+          onSubmit={handleUpdateSuccess}
+          clinic={clinic}
         />
       )}
 

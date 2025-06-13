@@ -1,18 +1,32 @@
 import { useState, useEffect } from "react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { supabase } from "@/lib/supabaseClient"
 import { toast } from "react-hot-toast"
+import { Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Textarea } from "@/components/ui/textarea"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
+
+// Form schema for report
+const reportFormSchema = z.object({
+  testStatus: z.string().min(1, "Test status is required"),
+  patient: z.string().min(1, "Patient is required"),
+  labTestType: z.string().min(1, "Lab test type is required"),
+  processingLab: z.string().min(1, "Processing lab is required"),
+  invoiceNumber: z.string().optional(),
+  sampleCollectionDate: z.string().optional(),
+  datePickedUpByLab: z.string().min(1, "Date picked up by lab is required"),
+  dateShippedToLab: z.string().optional(),
+  trackingNumber: z.string().optional(),
+  reportCompletionDate: z.string().optional(),
+  reportPDF: z.any().optional(),
+  notes: z.string().optional(),
+})
 
 const TEST_STATUS = [
   "Sample Received",
@@ -35,57 +49,88 @@ const PROCESSING_LABS = [
   "North Lab"
 ]
 
-export default function UpdateClinicReportDialog({ report, open, onOpenChange, onSuccess }) {
-  const [isLoading, setIsLoading] = useState(false)
+export default function UpdateClinicReportDialog({ isOpen, onClose, onSubmit, report, clinic }) {
   const [patients, setPatients] = useState([])
-  const [clinics, setClinics] = useState([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
-    status: "",
-    lab_test_type: "",
-    processing_lab: "",
-    reference_id: "",
-    invoice_number: "",
-    sample_collection_date: "",
-    date_picked_up_by_lab: "",
-    date_shipped_to_lab: "",
-    tracking_number: "",
-    report_completion_date: "",
+    testStatus: "",
+    testType: "",
+    processingLab: "",
+    sampleCollectionDate: null,
+    datePickedUpByLab: null,
+    dateShippedToLab: null,
+    reportCompletionDate: null,
     notes: "",
-    patient_id: "",
-    clinic_id: ""
+    documents: []
   })
 
+  const form = useForm({
+    resolver: zodResolver(reportFormSchema),
+    defaultValues: {
+      testStatus: report?.testStatus || "",
+      patient: report?.patient_id || "",
+      labTestType: report?.testType || "",
+      processingLab: report?.processingLab || "",
+      invoiceNumber: report?.invoice || "",
+      sampleCollectionDate: report?.sampleCollectionDate || "",
+      datePickedUpByLab: report?.datePickedUpByLab || "",
+      dateShippedToLab: report?.dateShippedToLab || "",
+      trackingNumber: report?.trackingNumber || "",
+      reportCompletionDate: report?.reportCompletionDate || "",
+      notes: report?.notes || ""
+    }
+  })
+
+  // Fetch patients when form opens
+  useEffect(() => {
+    if (isOpen) {
+      fetchPatients()
+    }
+  }, [isOpen])
+
+  // Normalize report data to handle both formats
+  const normalizeReportData = (report) => {
+    if (!report) return null
+    return {
+      id: report.id,
+      referenceId: report.reference_id || report.referenceId,
+      testStatus: report.status || report.testStatus,
+      testType: report.lab_test_type || report.testType,
+      processingLab: report.processing_lab || report.processingLab,
+      sampleCollectionDate: report.sample_collection_date || report.sampleCollectionDate,
+      datePickedUpByLab: report.date_picked_up_by_lab || report.datePickedUpByLab,
+      dateShippedToLab: report.date_shipped_to_lab || report.dateShippedToLab,
+      reportCompletionDate: report.report_completion_date || report.reportCompletionDate,
+      notes: report.notes,
+      documents: report.documents || []
+    }
+  }
+
+  // Update form values when report changes
   useEffect(() => {
     if (report) {
-      const formData = {
-        status: report.testStatus || "",
-        lab_test_type: report.testType || "",
-        processing_lab: report.processingLab || "",
-        reference_id: report.referenceId || "",
-        invoice_number: report.invoice || "",
-        sample_collection_date: report.sampleCollectionDate || "",
-        date_picked_up_by_lab: report.datePickedUpByLab || "",
-        date_shipped_to_lab: report.dateShippedToLab || "",
-        tracking_number: report.trackingNumber || "",
-        report_completion_date: report.reportCompletionDate || "",
-        notes: report.notes || "",
-        patient_id: report.patient_id || "",
-        clinic_id: report.clinic_id || ""
-      }
-      setFormData(formData)
+      const normalizedReport = normalizeReportData(report)
+      form.reset({
+        testStatus: normalizedReport.testStatus || "",
+        patient: report.patient_id || "",
+        labTestType: normalizedReport.testType || "",
+        processingLab: normalizedReport.processingLab || "",
+        invoiceNumber: report.invoice || report.invoice_number || "",
+        sampleCollectionDate: normalizedReport.sampleCollectionDate || "",
+        datePickedUpByLab: normalizedReport.datePickedUpByLab || "",
+        dateShippedToLab: normalizedReport.dateShippedToLab || "",
+        trackingNumber: report.trackingNumber || report.tracking_number || "",
+        reportCompletionDate: normalizedReport.reportCompletionDate || "",
+        notes: normalizedReport.notes || ""
+      })
     }
-  }, [report])
-
-  useEffect(() => {
-    fetchPatients()
-    fetchClinics()
-  }, [])
+  }, [report, form])
 
   const fetchPatients = async () => {
     try {
       const { data, error } = await supabase
         .from('patients')
-        .select('id, reference_id, first_name, last_name')
+        .select('id, first_name, last_name, reference_id')
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -96,66 +141,53 @@ export default function UpdateClinicReportDialog({ report, open, onOpenChange, o
     }
   }
 
-  const fetchClinics = async () => {
+  const handleSubmit = async (data) => {
     try {
-      const { data, error } = await supabase
-        .from('clinics')
-        .select('id, reference_id, name')
-        .order('name')
+      setIsSubmitting(true)
+      // Handle PDF upload if provided
+      let pdfUrl = report.pdf_url
+      if (data.reportPDF) {
+        const file = data.reportPDF
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${Date.now()}.${fileExt}`
+        const filePath = `reports/${fileName}`
 
-      if (error) throw error
-      setClinics(data || [])
-    } catch (error) {
-      console.error('Error fetching clinics:', error)
-      toast.error('Failed to fetch clinics')
-    }
-  }
+        const { error: uploadError } = await supabase.storage
+          .from('reports')
+          .upload(filePath, file)
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setIsLoading(true)
+        if (uploadError) throw uploadError
 
-    try {
-      // Process form data
-      const processedData = {
-        ...formData,
-        sample_collection_date: formData.sample_collection_date || null,
-        date_picked_up_by_lab: formData.date_picked_up_by_lab || null,
-        date_shipped_to_lab: formData.date_shipped_to_lab || null,
-        report_completion_date: formData.report_completion_date || null
+        const { data: { publicUrl } } = supabase.storage
+          .from('reports')
+          .getPublicUrl(filePath)
+
+        pdfUrl = publicUrl
       }
 
-      // Validate required fields
-      if (!processedData.status || !processedData.patient_id || !processedData.clinic_id) {
-        throw new Error('Please fill in all required fields')
+      // Convert empty date strings to null
+      const formatDate = (dateStr) => {
+        if (!dateStr) return null
+        return dateStr
       }
 
       // Update the report
-      const { error: updateError } = await supabase
+      const { data: updatedReport, error } = await supabase
         .from('reports')
         .update({
-          status: processedData.status,
-          patient_id: processedData.patient_id,
-          clinic_id: processedData.clinic_id,
-          lab_test_type: processedData.lab_test_type,
-          processing_lab: processedData.processing_lab,
-          invoice_number: processedData.invoice_number,
-          sample_collection_date: processedData.sample_collection_date,
-          date_picked_up_by_lab: processedData.date_picked_up_by_lab,
-          date_shipped_to_lab: processedData.date_shipped_to_lab,
-          tracking_number: processedData.tracking_number,
-          report_completion_date: processedData.report_completion_date,
-          notes: processedData.notes,
-          pdf_url: processedData.pdf_url,
+          status: data.testStatus,
+          patient_id: data.patient,
+          lab_test_type: data.labTestType,
+          processing_lab: data.processingLab,
+          sample_collection_date: formatDate(data.sampleCollectionDate),
+          date_picked_up_by_lab: data.datePickedUpByLab,
+          date_shipped_to_lab: formatDate(data.dateShippedToLab),
+          report_completion_date: formatDate(data.reportCompletionDate),
+          notes: data.notes || null,
+          pdf_url: pdfUrl,
           last_modified: new Date().toISOString()
         })
         .eq('id', report.id)
-
-      if (updateError) throw updateError
-
-      // Fetch the updated report with patient information
-      const { data: updatedReport, error: fetchError } = await supabase
-        .from('reports')
         .select(`
           id,
           reference_id,
@@ -177,14 +209,16 @@ export default function UpdateClinicReportDialog({ report, open, onOpenChange, o
           patients (
             first_name,
             last_name
+          ),
+          clinics (
+            name
           )
         `)
-        .eq('id', report.id)
         .single()
 
-      if (fetchError) throw fetchError
+      if (error) throw error
 
-      // Transform the report data for the UI
+      // Transform the data to match the UI format
       const transformedReport = {
         id: updatedReport.id,
         referenceId: updatedReport.reference_id,
@@ -205,240 +239,295 @@ export default function UpdateClinicReportDialog({ report, open, onOpenChange, o
         lastModified: updatedReport.last_modified,
         patient_id: updatedReport.patient_id,
         clinic_id: updatedReport.clinic_id,
-        associatedClinic: report.associatedClinic
+        associatedClinic: updatedReport.clinics?.name || clinic?.name || 'N/A'
       }
 
-      onSuccess(transformedReport)
-      onOpenChange(false)
+      onSubmit(transformedReport)
+      form.reset()
+      onClose()
+      toast.success('Report updated successfully')
     } catch (error) {
       console.error('Error updating report:', error)
       toast.error(error.message || 'Failed to update report')
     } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const formatDateForInput = (date) => {
-    if (!date) return ''
-    try {
-      const dateObj = new Date(date)
-      if (isNaN(dateObj.getTime())) return ''
-      return dateObj.toISOString().split('T')[0]
-    } catch (error) {
-      console.error('Error formatting date:', error)
-      return ''
+      setIsSubmitting(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Update Report</DialogTitle>
+          <DialogTitle className="text-lg font-semibold">Update Report</DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            Update the report details for {clinic?.name}.
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="status">Test Status <span className="text-red-500">*</span></Label>
-              <Select
-                value={formData.status}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, status: value }))}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TEST_STATUS.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
 
-            <div>
-              <Label htmlFor="patient">Patient <span className="text-red-500">*</span></Label>
-              <Select
-                value={formData.patient_id}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, patient_id: value }))}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select patient" />
-                </SelectTrigger>
-                <SelectContent>
-                  {patients.map((patient) => (
-                    <SelectItem key={patient.id} value={patient.id}>
-                      {patient.reference_id} - {patient.first_name} {patient.last_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="patient"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Patient <span className="text-destructive">*</span></FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select a patient" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {patients.map((patient) => (
+                          <SelectItem key={patient.id} value={patient.id}>
+                            {patient.reference_id} - {patient.first_name} {patient.last_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <div>
-              <Label htmlFor="lab_test_type">Lab Test Type <span className="text-red-500">*</span></Label>
-              <Select
-                value={formData.lab_test_type}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, lab_test_type: value }))}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select test type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TEST_TYPES.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <FormField
+                control={form.control}
+                name="testStatus"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Test Status <span className="text-destructive">*</span></FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select status" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {TEST_STATUS.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <div>
-              <Label htmlFor="processing_lab">Processing Lab <span className="text-red-500">*</span></Label>
-              <Select
-                value={formData.processing_lab}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, processing_lab: value }))}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select lab" />
-                </SelectTrigger>
-                <SelectContent>
-                  {PROCESSING_LABS.map((lab) => (
-                    <SelectItem key={lab} value={lab}>
-                      {lab}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <FormField
+                control={form.control}
+                name="labTestType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Test Type <span className="text-destructive">*</span></FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select test type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {TEST_TYPES.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <div>
-              <Label htmlFor="clinic">Associated Clinic <span className="text-red-500">*</span></Label>
-              <Select
-                value={formData.clinic_id}
-                onValueChange={(value) => setFormData(prev => ({ ...prev, clinic_id: value }))}
-                required
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select clinic" />
-                </SelectTrigger>
-                <SelectContent>
-                  {clinics.map((clinic) => (
-                    <SelectItem key={clinic.id} value={clinic.id}>
-                      {clinic.reference_id} - {clinic.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+              <FormField
+                control={form.control}
+                name="processingLab"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Processing Lab <span className="text-destructive">*</span></FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select lab" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {PROCESSING_LABS.map((lab) => (
+                          <SelectItem key={lab} value={lab}>
+                            {lab}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            <div>
-              <Label htmlFor="reference_id">Reference ID</Label>
-              <Input
-                id="reference_id"
-                value={formData.reference_id}
-                onChange={(e) => setFormData(prev => ({ ...prev, reference_id: e.target.value }))}
-                disabled
+              <FormField
+                control={form.control}
+                name="invoiceNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Invoice Number</FormLabel>
+                    <FormControl>
+                      <Input {...field} disabled className="bg-muted" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="trackingNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Tracking Number</FormLabel>
+                    <FormControl>
+                      <Input {...field} disabled className="bg-muted" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="sampleCollectionDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Sample Collection Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} className="w-full" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="datePickedUpByLab"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Date Picked Up by Lab <span className="text-destructive">*</span></FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} className="w-full" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="dateShippedToLab"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Date Shipped to Lab</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} className="w-full" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="reportCompletionDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Report Completion Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" {...field} className="w-full" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="reportPDF"
+                render={({ field: { value, onChange, ...field } }) => (
+                  <FormItem>
+                    <FormLabel className="text-sm font-medium">Report PDF</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="file"
+                        accept=".pdf"
+                        onChange={(e) => onChange(e.target.files[0])}
+                        className="w-full"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
             </div>
 
-            <div>
-              <Label htmlFor="invoice_number">Invoice Number</Label>
-              <Input
-                id="invoice_number"
-                value={formData.invoice_number}
-                onChange={(e) => setFormData(prev => ({ ...prev, invoice_number: e.target.value }))}
-                disabled
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="sample_collection_date">Sample Collection Date</Label>
-              <Input
-                id="sample_collection_date"
-                type="date"
-                value={formatDateForInput(formData.sample_collection_date)}
-                onChange={(e) => setFormData(prev => ({ ...prev, sample_collection_date: e.target.value || null }))}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="date_picked_up_by_lab">Date Picked Up by Lab <span className="text-red-500">*</span></Label>
-              <Input
-                id="date_picked_up_by_lab"
-                type="date"
-                value={formatDateForInput(formData.date_picked_up_by_lab)}
-                onChange={(e) => setFormData(prev => ({ ...prev, date_picked_up_by_lab: e.target.value || null }))}
-                required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="date_shipped_to_lab">Date Shipped to Lab</Label>
-              <Input
-                id="date_shipped_to_lab"
-                type="date"
-                value={formatDateForInput(formData.date_shipped_to_lab)}
-                onChange={(e) => setFormData(prev => ({ ...prev, date_shipped_to_lab: e.target.value || null }))}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="tracking_number">Tracking Number</Label>
-              <Input
-                id="tracking_number"
-                value={formData.tracking_number}
-                onChange={(e) => setFormData(prev => ({ ...prev, tracking_number: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="report_completion_date">Report Completion Date</Label>
-              <Input
-                id="report_completion_date"
-                type="date"
-                value={formatDateForInput(formData.report_completion_date)}
-                onChange={(e) => setFormData(prev => ({ ...prev, report_completion_date: e.target.value || null }))}
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-              rows={3}
-              className="resize-none"
+            <FormField
+              control={form.control}
+              name="notes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-sm font-medium">Notes</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Enter any additional notes"
+                      className="resize-none min-h-[80px]"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
-          </div>
 
-          <DialogFooter className="flex-none gap-2 sm:gap-0 pt-4 border-t mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={isLoading}
-              className="w-full sm:w-auto"
-            >
-              Cancel
-            </Button>
-            <Button 
-              type="submit" 
-              disabled={isLoading}
-              className="w-full sm:w-auto"
-            >
-              {isLoading ? 'Updating...' : 'Update Report'}
-            </Button>
-          </DialogFooter>
-        </form>
+            <DialogFooter className="flex-none gap-2 sm:gap-0">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                disabled={isSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                onClick={form.handleSubmit(handleSubmit)}
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  'Update Report'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
       </DialogContent>
     </Dialog>
   )

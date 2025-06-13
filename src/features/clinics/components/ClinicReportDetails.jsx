@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { useParams, useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -17,29 +18,116 @@ import {
   IconUser,
   IconTruck,
   IconPackage,
-  IconBarcode
+  IconBarcode,
+  IconLoader2
 } from "@tabler/icons-react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import UpdateClinicReportDialog from "./UpdateClinicReportDialog"
-import { toast } from "sonner"
+import { toast } from "react-hot-toast"
+import { supabase } from "@/lib/supabaseClient"
+import { Loader } from "@/components/shared/loader"
 
-export default function ClinicReportDetails({ report, onBack, onUpdate, onDelete }) {
+export default function ClinicReportDetails({ report: initialReport, onBack: initialOnBack, onUpdate: initialOnUpdate, onDelete: initialOnDelete }) {
+  const { reportId } = useParams()
+  const navigate = useNavigate()
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false)
-  const [currentReport, setCurrentReport] = useState(report)
+  const [currentReport, setCurrentReport] = useState(initialReport)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [loading, setLoading] = useState(!initialReport)
 
   useEffect(() => {
-    if (report) {
-      setCurrentReport(report)
+    const fetchReport = async () => {
+      if (initialReport) return
+
+      try {
+        const { data, error } = await supabase
+          .from('reports')
+          .select(`
+            id,
+            reference_id,
+            status,
+            lab_test_type,
+            processing_lab,
+            invoice_number,
+            sample_collection_date,
+            date_picked_up_by_lab,
+            date_shipped_to_lab,
+            tracking_number,
+            report_completion_date,
+            notes,
+            pdf_url,
+            created_at,
+            last_modified,
+            patient_id,
+            clinic_id,
+            patients (
+              first_name,
+              last_name
+            ),
+            clinics (
+              name
+            )
+          `)
+          .eq('id', reportId)
+          .single()
+
+        if (error) throw error
+
+        if (!data) {
+          toast.error('Report not found')
+          navigate('/reports')
+          return
+        }
+
+        // Transform the data to match the UI format
+        const transformedReport = {
+          id: data.id,
+          referenceId: data.reference_id,
+          firstName: data.patients?.first_name || 'N/A',
+          lastName: data.patients?.last_name || 'N/A',
+          testStatus: data.status,
+          testType: data.lab_test_type,
+          processingLab: data.processing_lab,
+          invoice: data.invoice_number,
+          sampleCollectionDate: data.sample_collection_date,
+          datePickedUpByLab: data.date_picked_up_by_lab,
+          dateShippedToLab: data.date_shipped_to_lab,
+          trackingNumber: data.tracking_number,
+          reportCompletionDate: data.report_completion_date,
+          notes: data.notes,
+          pdfUrl: data.pdf_url,
+          createdAt: data.created_at,
+          lastModified: data.last_modified,
+          patient_id: data.patient_id,
+          clinic_id: data.clinic_id,
+          associatedClinic: data.clinics?.name || 'N/A'
+        }
+
+        setCurrentReport(transformedReport)
+      } catch (error) {
+        console.error('Error fetching report:', error)
+        toast.error('Failed to fetch report details')
+        navigate('/reports')
+      } finally {
+        setLoading(false)
+      }
     }
-  }, [report])
+
+    fetchReport()
+  }, [reportId, initialReport, navigate])
 
   useEffect(() => {
-    if (currentReport) {
-      onUpdate(currentReport.id)
+    if (initialReport) {
+      setCurrentReport(initialReport)
     }
-  }, [currentReport, onUpdate])
+  }, [initialReport])
+
+  useEffect(() => {
+    if (currentReport && initialOnUpdate) {
+      initialOnUpdate(currentReport.id)
+    }
+  }, [currentReport, initialOnUpdate])
 
   const getStatusVariant = (status) => {
     switch (status?.toLowerCase()) {
@@ -59,7 +147,9 @@ export default function ClinicReportDetails({ report, onBack, onUpdate, onDelete
   const handleUpdateSuccess = (updatedReport) => {
     setIsUpdateDialogOpen(false)
     setCurrentReport(updatedReport)
-    onUpdate(updatedReport.id)
+    if (initialOnUpdate) {
+      initialOnUpdate(updatedReport.id)
+    }
   }
 
   const handleDeleteClick = () => {
@@ -69,14 +159,33 @@ export default function ClinicReportDetails({ report, onBack, onUpdate, onDelete
   const handleDeleteConfirm = async () => {
     try {
       setIsDeleting(true)
-      await onDelete(currentReport)
-      onBack()
+      if (initialOnDelete) {
+        await initialOnDelete(currentReport)
+        toast.success('Report deleted successfully')
+      } else {
+        const { error } = await supabase
+          .from('reports')
+          .delete()
+          .eq('id', currentReport.id)
+
+        if (error) throw error
+        toast.success('Report deleted successfully')
+      }
+      handleBack()
     } catch (error) {
       console.error('Error deleting report:', error)
       toast.error('Failed to delete report')
     } finally {
       setIsDeleting(false)
       setDeleteDialogOpen(false)
+    }
+  }
+
+  const handleBack = () => {
+    if (initialOnBack) {
+      initialOnBack()
+    } else {
+      navigate(-1)
     }
   }
 
@@ -96,6 +205,22 @@ export default function ClinicReportDetails({ report, onBack, onUpdate, onDelete
     }
   }
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader message="Loading report details..." />
+      </div>
+    )
+  }
+
+  if (!currentReport) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        Report not found
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
       {/* Header */}
@@ -104,7 +229,7 @@ export default function ClinicReportDetails({ report, onBack, onUpdate, onDelete
           <Button
             variant="ghost"
             size="icon"
-            onClick={onBack}
+            onClick={handleBack}
             className="h-8 w-8"
           >
             <IconArrowLeft className="h-4 w-4" />
@@ -131,11 +256,11 @@ export default function ClinicReportDetails({ report, onBack, onUpdate, onDelete
               <Button
                 variant="destructive"
                 size="sm"
+                onClick={handleDeleteClick}
                 className="flex-1 sm:flex-none"
-                disabled={isDeleting}
               >
                 <IconTrash className="h-4 w-4 mr-2" />
-                {isDeleting ? 'Deleting...' : 'Delete'}
+                Delete Report
               </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -147,9 +272,20 @@ export default function ClinicReportDetails({ report, onBack, onUpdate, onDelete
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteConfirm}>
-                  Delete Report
+                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteConfirm}
+                  disabled={isDeleting}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  {isDeleting ? (
+                    <>
+                      <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete Report'
+                  )}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -335,9 +471,9 @@ export default function ClinicReportDetails({ report, onBack, onUpdate, onDelete
       {/* Update Dialog */}
       <UpdateClinicReportDialog
         report={currentReport}
-        open={isUpdateDialogOpen}
-        onOpenChange={setIsUpdateDialogOpen}
-        onSuccess={handleUpdateSuccess}
+        isOpen={isUpdateDialogOpen}
+        onClose={() => setIsUpdateDialogOpen(false)}
+        onSubmit={handleUpdateSuccess}
       />
     </div>
   )
