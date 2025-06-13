@@ -24,7 +24,22 @@ import {
   IconUser,
   IconFileText,
   IconChartBar,
-  IconRefresh
+  IconRefresh,
+  IconBell,
+  IconSettings,
+  IconAlertCircle,
+  IconCircleCheck,
+  IconDatabase,
+  IconServer,
+  IconShield,
+  IconChartLine,
+  IconChartPie,
+  IconChartDots,
+  IconSearch,
+  IconFilter,
+  IconDownload,
+  IconPrinter,
+  IconMail
 } from "@tabler/icons-react"
 import { Link } from "react-router-dom"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
@@ -63,11 +78,26 @@ export default function AdminDashboard() {
   const [reportStats, setReportStats] = useState([])
   const [recentActivity, setRecentActivity] = useState([])
   const [topClinics, setTopClinics] = useState([])
-  const { user } = useAuth()
+  const { user, userDetails } = useAuth()
+  const [systemHealth, setSystemHealth] = useState({
+    database: 'healthy',
+    server: 'healthy',
+    security: 'healthy',
+    lastChecked: new Date()
+  })
+  const [notifications, setNotifications] = useState([])
+  const [quickStats, setQuickStats] = useState({
+    pendingReports: 0,
+    criticalAlerts: 0,
+    systemUpdates: 0,
+    activeUsers: 0
+  })
 
   useEffect(() => {
     if (user) {
       fetchDashboardData()
+      fetchSystemHealth()
+      fetchNotifications()
     }
   }, [user])
 
@@ -268,6 +298,36 @@ export default function AdminDashboard() {
     return value >= 0 ? <IconArrowUpRight className="h-4 w-4" /> : <IconArrowDownRight className="h-4 w-4" />
   }
 
+  // Add new function to fetch system health
+  const fetchSystemHealth = async () => {
+    // Simulate system health check
+    setSystemHealth({
+      database: Math.random() > 0.1 ? 'healthy' : 'warning',
+      server: Math.random() > 0.1 ? 'healthy' : 'warning',
+      security: Math.random() > 0.1 ? 'healthy' : 'warning',
+      lastChecked: new Date()
+    })
+  }
+
+  // Add new function to fetch notifications
+  const fetchNotifications = async () => {
+    // Simulate notifications
+    setNotifications([
+      {
+        id: 1,
+        type: 'alert',
+        message: 'System maintenance scheduled for tomorrow',
+        timestamp: new Date(Date.now() - 3600000)
+      },
+      {
+        id: 2,
+        type: 'update',
+        message: 'New clinic registration request',
+        timestamp: new Date(Date.now() - 7200000)
+      }
+    ])
+  }
+
   if (isLoading) {
     return (
       <div className="flex flex-col gap-4 p-4">
@@ -308,16 +368,130 @@ export default function AdminDashboard() {
         <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
           <div className="container mx-auto px-4">
             <div className="flex flex-col gap-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-                  <p className="text-muted-foreground">Manage your healthcare system</p>
+              {/* Header Section */}
+              <header className="sticky top-0 z-50 bg-background border-b">
+                <div className="container mx-auto px-4">
+                  <div className="flex items-center justify-between h-16">
+                    <div>
+                      <h1 className="text-xl md:text-2xl font-bold">Admin Dashboard</h1>
+                      <p className="text-sm text-muted-foreground">Welcome back, {userDetails?.name?.split(' ')[0] || 'Admin'}</p>
+                    </div>
+                    <div className="flex items-center gap-1 sm:gap-2">
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={handleRefresh} 
+                        disabled={isRefreshing}
+                        className="h-9 w-9"
+                      >
+                        <IconRefresh className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                        <span className="sr-only">Refresh</span>
+                      </Button>
+                      {/* <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="h-9 w-9"
+                      >
+                        <IconSettings className="h-4 w-4" />
+                        <span className="sr-only">Settings</span>
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="h-9 w-9 relative"
+                      >
+                        <IconBell className="h-4 w-4" />
+                        {notifications.length > 0 && (
+                          <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-[10px] text-white flex items-center justify-center">
+                            {notifications.length}
+                          </span>
+                        )}
+                        <span className="sr-only">Notifications</span>
+                      </Button> */}
+                    </div>
+                  </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isRefreshing}>
-                  <IconRefresh className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
-                  Refresh
-                </Button>
+              </header>
+
+              {/* Quick Stats Row */}
+              <div className="grid gap-4 md:grid-cols-4">
+                <Card className="bg-blue-50 dark:bg-blue-950">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">System Health</CardTitle>
+                    <IconServer className="h-4 w-4 text-blue-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center gap-2">
+                      <IconCircleCheck className="h-5 w-5 text-green-500" />
+                      <span className="text-sm">All systems operational</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Last checked: {systemHealth.lastChecked.toLocaleTimeString()}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-purple-50 dark:bg-purple-950">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Active Users</CardTitle>
+                    <IconUsers className="h-4 w-4 text-purple-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{quickStats.activeUsers}</div>
+                    <p className="text-xs text-muted-foreground">Currently online</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-orange-50 dark:bg-orange-950">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Pending Reports</CardTitle>
+                    <IconFileText className="h-4 w-4 text-orange-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{quickStats.pendingReports}</div>
+                    <p className="text-xs text-muted-foreground">Require attention</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-red-50 dark:bg-red-950">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Critical Alerts</CardTitle>
+                    <IconAlertCircle className="h-4 w-4 text-red-500" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{quickStats.criticalAlerts}</div>
+                    <p className="text-xs text-muted-foreground">Need immediate action</p>
+                  </CardContent>
+                </Card>
               </div>
+
+              {/* Quick Actions */}
+              {/* <div className="grid gap-4 md:grid-cols-6">
+                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
+                  <IconPlus className="h-6 w-6" />
+                  <span>New Patient</span>
+                </Button>
+                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
+                  <IconHospital className="h-6 w-6" />
+                  <span>New Clinic</span>
+                </Button>
+                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
+                  <IconReportMedical className="h-6 w-6" />
+                  <span>New Report</span>
+                </Button>
+                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
+                  <IconDownload className="h-6 w-6" />
+                  <span>Export Data</span>
+                </Button>
+                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
+                  <IconPrinter className="h-6 w-6" />
+                  <span>Print Reports</span>
+                </Button>
+                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
+                  <IconMail className="h-6 w-6" />
+                  <span>Send Alerts</span>
+                </Button>
+              </div> */}
 
               {/* Overview Stats Cards */}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -393,10 +567,22 @@ export default function AdminDashboard() {
               {/* Charts and Detailed Stats */}
               <Tabs defaultValue="overview" className="w-full">
                 <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="overview">Overview</TabsTrigger>
-                  <TabsTrigger value="patients">Patients</TabsTrigger>
-                  <TabsTrigger value="clinics">Clinics</TabsTrigger>
-                  <TabsTrigger value="reports">Reports</TabsTrigger>
+                  <TabsTrigger value="overview" className="flex items-center gap-2">
+                    <IconChartLine className="h-4 w-4" />
+                    Overview
+                  </TabsTrigger>
+                  <TabsTrigger value="patients" className="flex items-center gap-2">
+                    <IconUsers className="h-4 w-4" />
+                    Patients
+                  </TabsTrigger>
+                  <TabsTrigger value="clinics" className="flex items-center gap-2">
+                    <IconHospital className="h-4 w-4" />
+                    Clinics
+                  </TabsTrigger>
+                  <TabsTrigger value="reports" className="flex items-center gap-2">
+                    <IconReportMedical className="h-4 w-4" />
+                    Reports
+                  </TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="overview" className="space-y-4">
@@ -636,6 +822,81 @@ export default function AdminDashboard() {
                       </div>
                     </CardContent>
                   </Card>
+                </TabsContent>
+
+                {/* Add System Status Tab */}
+                <TabsContent value="system" className="space-y-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>System Health</CardTitle>
+                        <CardDescription>Current system status and performance</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <IconDatabase className="h-5 w-5" />
+                              <span>Database Status</span>
+                            </div>
+                            <Badge variant={systemHealth.database === 'healthy' ? 'success' : 'destructive'}>
+                              {systemHealth.database}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <IconServer className="h-5 w-5" />
+                              <span>Server Status</span>
+                            </div>
+                            <Badge variant={systemHealth.server === 'healthy' ? 'success' : 'destructive'}>
+                              {systemHealth.server}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <IconShield className="h-5 w-5" />
+                              <span>Security Status</span>
+                            </div>
+                            <Badge variant={systemHealth.security === 'healthy' ? 'success' : 'destructive'}>
+                              {systemHealth.security}
+                            </Badge>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Recent Notifications</CardTitle>
+                        <CardDescription>Latest system alerts and updates</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ScrollArea className="h-[200px]">
+                          <div className="space-y-4">
+                            {notifications.map((notification) => (
+                              <div key={notification.id} className="flex items-start gap-4">
+                                <div className={`p-2 rounded-full ${
+                                  notification.type === 'alert' ? 'bg-red-100' : 'bg-blue-100'
+                                }`}>
+                                  {notification.type === 'alert' ? (
+                                    <IconAlertCircle className="h-4 w-4 text-red-500" />
+                                  ) : (
+                                    <IconBell className="h-4 w-4 text-blue-500" />
+                                  )}
+                                </div>
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{notification.message}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {notification.timestamp.toLocaleString()}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </ScrollArea>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </TabsContent>
               </Tabs>
             </div>

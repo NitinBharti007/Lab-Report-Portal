@@ -27,6 +27,11 @@ export const AuthProvider = ({ children }) => {
     return data;
   };
 
+  // Add updateUserDetails function
+  const updateUserDetails = (newDetails) => {
+    setUserDetails(newDetails);
+  };
+
   // Handle session state
   const handleSession = async (session) => {
     if (session?.user) {
@@ -106,7 +111,8 @@ export const AuthProvider = ({ children }) => {
       userDetails, 
       login, 
       logout,
-      loading
+      loading,
+      updateUserDetails
     }}>
       {children}
     </AuthContext.Provider>

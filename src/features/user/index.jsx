@@ -10,7 +10,7 @@ import { IconEdit, IconCamera } from "@tabler/icons-react";
 import PageLayout from "@/components/layouts/PageLayout";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import toast from "react-hot-toast";
+import { toast } from "react-hot-toast";
 import { Loader } from "@/components/shared/loader";
 import { PasswordChangeForm } from "./PasswordChangeForm";
 import { useAuth } from "@/context/AuthContext";
@@ -304,7 +304,8 @@ export default function UserDetails() {
       toast.success("Profile updated successfully", { id: loadingToast });
     } catch (err) {
       console.error("Update error:", err);
-      toast.error(err.message || "Failed to update profile", { id: loadingToast });
+      toast.dismiss(loadingToast);
+      toast.error(err.message || "Failed to update profile");
     } finally {
       setUpdatingProfile(false);
     }
