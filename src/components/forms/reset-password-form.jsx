@@ -88,7 +88,9 @@ export function ResetPasswordForm({
       
       // After successful password update, sign out and redirect to login
       await supabase.auth.signOut()
+      // Use replace: true to prevent going back to reset password page
       navigate("/login", { 
+        replace: true,
         state: { 
           message: "Password updated successfully. Please login with your new password." 
         }
@@ -96,7 +98,6 @@ export function ResetPasswordForm({
     } catch (error) {
       console.error('Password update error:', error)
       setError(error.message)
-    } finally {
       setLoading(false)
     }
   }

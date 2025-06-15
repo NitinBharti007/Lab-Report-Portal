@@ -72,7 +72,7 @@ export default function PatientView({ patient, onBack, onUpdate, onDelete }) {
               sampleCollectionDate: data.sample_collection_date,
               datePickedUpByLab: data.date_picked_up_by_lab,
               dateShippedToLab: data.date_shipped_to_lab,
-              reportCompletionDate: data.report_completion_date || data.created_at,
+              reportCompletionDate: data.report_completion_date,
               firstName: patient.first_name,
               lastName: patient.last_name
             }

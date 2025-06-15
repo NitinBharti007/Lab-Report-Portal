@@ -11,7 +11,6 @@ import { supabase } from "@/lib/supabaseClient"
 import AdminDashboard from "./AdminDashboard"
 import ClientDashboard from "./ClientDashboard"
 
-import data from "./data.json"
 
 export default function Page() {
   const [isLoading, setIsLoading] = useState(true)

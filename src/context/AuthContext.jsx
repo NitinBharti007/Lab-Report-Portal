@@ -34,6 +34,9 @@ export const AuthProvider = ({ children }) => {
 
   // Handle session state
   const handleSession = async (session) => {
+    const currentPath = window.location.pathname;
+    const isAuthRoute = ['/login', '/forgot-password', '/reset-password', '/auth/callback'].includes(currentPath);
+
     if (session?.user) {
       setUser(session.user);
       setIsAuthenticated(true);
@@ -43,7 +46,10 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       setUserDetails(null);
       setIsAuthenticated(false);
-      navigate('/login', { replace: true });
+      // Only redirect to login if we're not already on an auth route
+      if (!isAuthRoute) {
+        navigate('/login', { replace: true });
+      }
     }
   };
 
@@ -66,18 +72,23 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      setLoading(true);
+      // Don't set loading here as it's handled by the form
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Login error:', error);
+        return { data: null, error };
+      }
+
+      // If login successful, update the session
+      await handleSession(data.session);
       return { data, error: null };
     } catch (error) {
+      console.error('Login error:', error);
       return { data: null, error };
-    } finally {
-      setLoading(false);
     }
   };
 

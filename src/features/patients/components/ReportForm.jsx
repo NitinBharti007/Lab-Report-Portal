@@ -39,11 +39,11 @@ const reportFormSchema = z.object({
   testType: z.string().min(1, "Lab test type is required"),
   processingLab: z.string().min(1, "Processing lab is required"),
   invoice: z.string().optional(),
-  sampleCollectionDate: z.string().optional(),
+  sampleCollectionDate: z.string().optional().nullable(),
   datePickedUpByLab: z.string().min(1, "Date picked up by lab is required"),
-  dateShippedToLab: z.string().optional(),
+  dateShippedToLab: z.string().optional().nullable(),
   trackingNumber: z.string().optional(),
-  reportCompletionDate: z.string().optional(),
+  reportCompletionDate: z.string().optional().nullable(),
   reportPDF: z.any().optional(),
   notes: z.string().optional(),
 })
@@ -123,6 +123,32 @@ const generateIds = async () => {
   }
 }
 
+// Helper function to format date for form - modified to handle null/empty values
+const formatDateForForm = (dateString) => {
+  if (!dateString) return null
+  try {
+    const date = new Date(dateString)
+    // Check if date is valid
+    if (isNaN(date.getTime())) return null
+    return date.toISOString().split('T')[0]
+  } catch {
+    return null
+  }
+}
+
+// Helper function to format date for database - modified to handle null/empty values
+const formatDateForDatabase = (dateStr) => {
+  if (!dateStr) return null
+  try {
+    const date = new Date(dateStr)
+    // Check if date is valid
+    if (isNaN(date.getTime())) return null
+    return date.toISOString()
+  } catch {
+    return null
+  }
+}
+
 export default function ReportForm({ 
   patient, 
   report, 
@@ -136,16 +162,6 @@ export default function ReportForm({
   const [clinics, setClinics] = useState([])
   const [generatedIds, setGeneratedIds] = useState(null)
   const [isGeneratingId, setIsGeneratingId] = useState(false)
-
-  // Helper function to format date for form - simplified
-  const formatDateForForm = (dateString) => {
-    if (!dateString) return ""
-    try {
-      return new Date(dateString).toISOString().split('T')[0]
-    } catch {
-      return ""
-    }
-  }
 
   // Initialize form with proper date formatting
   const form = useForm({
@@ -244,18 +260,27 @@ export default function ReportForm({
   const handleSubmit = async (data) => {
     try {
       setIsLoading(true)
-      // Only include generated IDs in add mode
-      const reportData = mode === "add" ? {
+      
+      // Format dates for database submission and include generated IDs in add mode
+      const formattedData = {
         ...data,
-        reference_id: generatedIds?.referenceId,
-        invoice: generatedIds?.invoiceNumber,
-        trackingNumber: generatedIds?.trackingNumber
-      } : data
+        // Include generated IDs only in add mode
+        ...(mode === "add" ? {
+          reference_id: generatedIds?.referenceId,
+          invoice: generatedIds?.invoiceNumber,
+          trackingNumber: generatedIds?.trackingNumber
+        } : {}),
+        // Format dates for database
+        sampleCollectionDate: formatDateForDatabase(data.sampleCollectionDate),
+        datePickedUpByLab: formatDateForDatabase(data.datePickedUpByLab),
+        dateShippedToLab: formatDateForDatabase(data.dateShippedToLab),
+        reportCompletionDate: formatDateForDatabase(data.reportCompletionDate)
+      }
 
-      await onSubmit(reportData)
+      await onSubmit(formattedData)
     } catch (error) {
       console.error('Error submitting form:', error)
-      toast.error('Failed to submit form')
+      toast.error(error.message || 'Failed to submit form')
     } finally {
       setIsLoading(false)
     }
@@ -449,7 +474,12 @@ export default function ReportForm({
                         type="date" 
                         {...field} 
                         value={field.value || ''} 
-                        className="w-full" 
+                        className="w-full"
+                        onChange={(e) => {
+                          // Handle empty date input
+                          const value = e.target.value || null
+                          field.onChange(value)
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -468,7 +498,12 @@ export default function ReportForm({
                         type="date" 
                         {...field} 
                         value={field.value || ''} 
-                        className="w-full" 
+                        className="w-full"
+                        onChange={(e) => {
+                          // Handle empty date input
+                          const value = e.target.value || null
+                          field.onChange(value)
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -487,7 +522,12 @@ export default function ReportForm({
                         type="date" 
                         {...field} 
                         value={field.value || ''} 
-                        className="w-full" 
+                        className="w-full"
+                        onChange={(e) => {
+                          // Handle empty date input
+                          const value = e.target.value || null
+                          field.onChange(value)
+                        }}
                       />
                     </FormControl>
                     <FormMessage />
@@ -506,7 +546,12 @@ export default function ReportForm({
                         type="date" 
                         {...field} 
                         value={field.value || ''} 
-                        className="w-full" 
+                        className="w-full"
+                        onChange={(e) => {
+                          // Handle empty date input
+                          const value = e.target.value || null
+                          field.onChange(value)
+                        }}
                       />
                     </FormControl>
                     <FormMessage />

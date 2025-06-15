@@ -147,7 +147,7 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
         sampleCollectionDate: report.sample_collection_date,
         datePickedUpByLab: report.date_picked_up_by_lab,
         dateShippedToLab: report.date_shipped_to_lab,
-        reportCompletionDate: report.report_completion_date || report.created_at
+        reportCompletionDate: report.report_completion_date
       }))
 
       setReports(transformedReports)
@@ -523,6 +523,17 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
     window.URL.revokeObjectURL(url)
   }
 
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A"
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return "N/A"
+      return date.toLocaleDateString()
+    } catch {
+      return "N/A"
+    }
+  }
+
   if (isLoading) {
     return (
       <Card>
@@ -724,7 +735,7 @@ export default function PatientReports({ patient, onViewReport, onUpdateReport, 
                           <TableCell className="whitespace-nowrap">{report.associatedClinic}</TableCell>
                           <TableCell className="whitespace-nowrap">{report.testType}</TableCell>
                           <TableCell className="whitespace-nowrap">
-                          {new Date(report.reportCompletionDate).toLocaleDateString()}
+                          {formatDate(report.reportCompletionDate)}
                         </TableCell>
                           <TableCell className="whitespace-nowrap">{report.processingLab}</TableCell>
                           <TableCell className="whitespace-nowrap">{report.invoice}</TableCell>

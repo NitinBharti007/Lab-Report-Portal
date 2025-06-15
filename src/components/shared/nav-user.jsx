@@ -120,10 +120,12 @@ export function NavUser() {
                 <IconUserCircle className="mr-2 h-4 w-4" />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleClinicDetails}>
-                <IconCreditCard className="mr-2 h-4 w-4" />
-                Clinic Details
-              </DropdownMenuItem>
+              {userDetails?.role !== 'admin' && (
+                <DropdownMenuItem onClick={handleClinicDetails}>
+                  <IconCreditCard className="mr-2 h-4 w-4" />
+                  Clinic Details
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem>
                 <IconNotification className="mr-2 h-4 w-4" />
                 Notifications

@@ -27,6 +27,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 
+const formatDate = (dateString) => {
+  if (!dateString) return "N/A"
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return "N/A"
+    return date.toLocaleDateString()
+  } catch {
+    return "N/A"
+  }
+}
+
 export default function ReportDetails({ report, patient, onBack, onUpdate, onDelete }) {
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
@@ -147,13 +158,13 @@ export default function ReportDetails({ report, patient, onBack, onUpdate, onDel
                 <div>
                   <h3 className="text-sm font-semibold mb-1">Sample Collection Date</h3>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(report.sampleCollectionDate || report.reportCompletionDate).toLocaleDateString()}
+                    {formatDate(report.sampleCollectionDate)}
                   </p>
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold mb-1">Date Picked Up by Lab</h3>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(report.datePickedUpByLab || report.reportCompletionDate).toLocaleDateString()}
+                    {formatDate(report.datePickedUpByLab)}
                   </p>
                 </div>
                 <div>
@@ -163,13 +174,13 @@ export default function ReportDetails({ report, patient, onBack, onUpdate, onDel
                 <div>
                   <h3 className="text-sm font-semibold mb-1">Date Shipped to Lab</h3>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(report.dateShippedToLab || report.reportCompletionDate).toLocaleDateString()}
+                    {formatDate(report.dateShippedToLab)}
                   </p>
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold mb-1">Report Completion Date</h3>
                   <p className="text-sm text-muted-foreground">
-                    {new Date(report.reportCompletionDate).toLocaleDateString()}
+                    {formatDate(report.reportCompletionDate)}
                   </p>
                 </div>
               </div>
