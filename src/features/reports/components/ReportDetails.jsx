@@ -51,7 +51,7 @@ const formatDate = (dateString) => {
   }
 }
 
-export default function ReportDetails({ report, onBack, onUpdate, onDelete }) {
+export default function ReportDetails({ report, onBack, onUpdate, onDelete, userRole }) {
   const [isDeleting, setIsDeleting] = useState(false)
 
   const handleDelete = async () => {
@@ -86,45 +86,48 @@ export default function ReportDetails({ report, onBack, onUpdate, onDelete }) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onUpdate(report)}
-            className="flex-1 sm:flex-none"
-          >
-            <IconPencil className="h-4 w-4 mr-2" />
-            Update Report
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="flex-1 sm:flex-none"
-                disabled={isDeleting}
-              >
-                <IconTrash className="h-4 w-4 mr-2" />
-                {isDeleting ? 'Deleting...' : 'Delete'}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This action cannot be undone. This will permanently delete the report
-                  and remove it from our servers.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDelete}>
-                  Delete Report
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+        {/* Only show Update and Delete buttons for admin users */}
+        {userRole === 'admin' && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onUpdate(report)}
+              className="flex-1 sm:flex-none"
+            >
+              <IconPencil className="h-4 w-4 mr-2" />
+              Update Report
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="flex-1 sm:flex-none"
+                  disabled={isDeleting}
+                >
+                  <IconTrash className="h-4 w-4 mr-2" />
+                  {isDeleting ? 'Deleting...' : 'Delete'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete the report
+                    and remove it from our servers.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={handleDelete}>
+                    Delete Report
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
       </div>
 
       <Separator />
@@ -200,13 +203,16 @@ export default function ReportDetails({ report, onBack, onUpdate, onDelete }) {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="associatedClinic">Associated Clinic</Label>
-                <div className="flex items-center gap-2 text-sm sm:text-base">
-                  <IconBuilding className="h-4 w-4 text-muted-foreground" />
-                  <span>{report.associatedClinic}</span>
+              {/* Only show Associated Clinic for admin users */}
+              {userRole === 'admin' && (
+                <div className="space-y-2">
+                  <Label htmlFor="associatedClinic">Associated Clinic</Label>
+                  <div className="flex items-center gap-2 text-sm sm:text-base">
+                    <IconBuilding className="h-4 w-4 text-muted-foreground" />
+                    <span>{report.associatedClinic}</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -318,7 +324,8 @@ export default function ReportDetails({ report, onBack, onUpdate, onDelete }) {
               )}
             </div>
 
-            {report.pdf_url && (
+            {/* Only show PDF button for client users */}
+            {userRole !== 'admin' && report.pdf_url && (
               <div className="mt-4">
                 <Button
                   variant="outline"

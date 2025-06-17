@@ -5,7 +5,8 @@ import { IconDownload, IconPlus } from "@tabler/icons-react"
 export default function ReportsHeader({ 
   totalReports, 
   onExport,
-  onAdd
+  onAdd,
+  userRole
 }) {
   return (
     <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 px-3 sm:px-6">
@@ -16,14 +17,17 @@ export default function ReportsHeader({
         </CardDescription>
       </div>
       <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-        <Button
-          size="sm"
-          onClick={onAdd}
-          className="flex items-center"
-        >
-          <IconPlus className="h-4 w-4 mr-2" />
-          Add Report
-        </Button>
+        {/* Only show Add Report button for admin users */}
+        {userRole === 'admin' && (
+          <Button
+            size="sm"
+            onClick={onAdd}
+            className="flex items-center"
+          >
+            <IconPlus className="h-4 w-4 mr-2" />
+            Add Report
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"

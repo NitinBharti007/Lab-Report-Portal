@@ -40,6 +40,7 @@ export default function Reports() {
   const { user } = useAuth()
   const [selectedPatient, setSelectedPatient] = useState(null)
   const [error, setError] = useState(null)
+  const [userRole, setUserRole] = useState(null)
 
   useEffect(() => {
     console.log('Component mounted, fetching reports...')
@@ -187,6 +188,8 @@ export default function Reports() {
       }
 
       console.log('User data:', userData)
+      setUserRole(userData.role) // Store user role for component rendering
+      
       let query = supabase
         .from('reports')
         .select(`
@@ -404,6 +407,12 @@ export default function Reports() {
   }
 
   const handleAdd = async () => {
+    // Only allow admin users to add reports
+    if (userRole !== 'admin') {
+      toast.error('Only administrators can add reports')
+      return
+    }
+
     try {
       // Fetch all patients to show in the dialog
       const { data: patients, error } = await supabase
@@ -747,6 +756,7 @@ export default function Reports() {
                 totalReports={pagination.total} 
                 onExport={handleExport}
                 onAdd={handleAdd}
+                userRole={userRole}
               />
               <ReportsFilters
                 searchQuery={searchQuery}
@@ -760,7 +770,10 @@ export default function Reports() {
                   <p className="text-sm text-muted-foreground mt-2">
                     {searchQuery || Object.values(filters).some(v => v !== 'all') 
                       ? 'Try adjusting your search or filters'
-                      : 'Add your first report using the "Add Report" button above'}
+                      : userRole === 'admin' 
+                        ? 'Add your first report using the "Add Report" button above'
+                        : 'No reports are available for your clinic'
+                    }
                   </p>
                 </div>
               ) : (
@@ -775,6 +788,7 @@ export default function Reports() {
                   pagination={pagination}
                   onPageChange={handlePageChange}
                   onPageSizeChange={handlePageSizeChange}
+                  userRole={userRole}
                 />
               )}
             </>
@@ -786,24 +800,31 @@ export default function Reports() {
               onBack={handleBack}
               onUpdate={handleUpdate}
               onDelete={handleDelete}
+              userRole={userRole}
             />
           )}
         </Card>
       </div>
 
-      <AddReportDialog
-        isOpen={isAddDialogOpen}
-        onClose={() => setIsAddDialogOpen(false)}
-        onSubmit={handleAddSubmit}
-        patient={selectedPatient}
-      />
+      {/* Only show Add Report dialog for admin users */}
+      {userRole === 'admin' && (
+        <AddReportDialog
+          isOpen={isAddDialogOpen}
+          onClose={() => setIsAddDialogOpen(false)}
+          onSubmit={handleAddSubmit}
+          patient={selectedPatient}
+        />
+      )}
 
-      <UpdateReportDialog
-        isOpen={isUpdateDialogOpen}
-        onClose={() => setIsUpdateDialogOpen(false)}
-        onSubmit={handleUpdateSubmit}
-        report={selectedReport}
-      />
+      {/* Only show Update Report dialog for admin users */}
+      {userRole === 'admin' && (
+        <UpdateReportDialog
+          isOpen={isUpdateDialogOpen}
+          onClose={() => setIsUpdateDialogOpen(false)}
+          onSubmit={handleUpdateSubmit}
+          report={selectedReport}
+        />
+      )}
     </PageLayout>
   )
 }

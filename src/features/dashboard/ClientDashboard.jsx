@@ -24,16 +24,18 @@ import {
   IconChevronDown,
   IconChevronUp,
   IconBell,
-  IconSettings
+  IconSettings,
+  IconFileText
 } from "@tabler/icons-react"
 import { Link } from "react-router-dom"
 import { useAuth } from "@/context/AuthContext"
+import { supabase } from "@/lib/supabaseClient"
+import { toast } from "react-hot-toast"
 import { cn } from "@/lib/utils"
 
 export default function ClientDashboard() {
-  const { user, userDetails } = useAuth()
+  const { user } = useAuth()
   const [isLoading, setIsLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState("overview")
   const [reports, setReports] = useState({
     recent: [],
     pending: [],
@@ -42,74 +44,201 @@ export default function ClientDashboard() {
   const [clinicStats, setClinicStats] = useState({
     totalReports: 0,
     pendingReports: 0,
-    completedReports: 0,
-    associatedPatients: 0
+    completedReports: 0
   })
-  const [selectedClinic, setSelectedClinic] = useState(null)
-  const [clinics, setClinics] = useState([])
+  const [userClinic, setUserClinic] = useState(null)
   const [searchQuery, setSearchQuery] = useState("")
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
 
   useEffect(() => {
-    const fetchClinicData = async () => {
-      try {
-        setIsLoading(true)
-        // Fetch clinics associated with the client
-        const clinicsResponse = await fetch('/api/client/clinics')
-        const clinicsData = await clinicsResponse.json()
-        setClinics(clinicsData)
-        
-        if (clinicsData.length > 0) {
-          setSelectedClinic(clinicsData[0].id)
-          await fetchReports(clinicsData[0].id)
-        }
-      } catch (error) {
-        console.error('Error fetching clinic data:', error)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchClinicData()
+    fetchDashboardData()
   }, [])
 
-  const fetchReports = async (clinicId) => {
+  const fetchDashboardData = async () => {
     try {
-      // Fetch reports for the selected clinic
-      const reportsResponse = await fetch(`/api/client/reports?clinicId=${clinicId}`)
-      const reportsData = await reportsResponse.json()
+      setIsLoading(true)
       
+      if (!user) {
+        toast.error('Please log in to view dashboard')
+        return
+      }
+
+      // Get user's clinic information
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('role, clinic_id')
+        .eq('user_id', user.id)
+        .single()
+
+      if (userError) {
+        console.error('Error fetching user data:', userError)
+        throw userError
+      }
+
+      console.log('User data:', userData)
+      console.log('User role:', userData.role)
+      console.log('User clinic_id:', userData.clinic_id)
+
+      // Check if user is a client (not admin) and has a clinic_id
+      if (userData.role === 'admin') {
+        toast.error('This dashboard is for client users only. Please use the admin dashboard.')
+        return
+      }
+
+      if (!userData.clinic_id) {
+        toast.error('No clinic assigned to your account. Please contact your administrator.')
+        return
+      }
+
+      // Get clinic information
+      const { data: clinicData, error: clinicError } = await supabase
+        .from('clinics')
+        .select('id, name, address')
+        .eq('id', userData.clinic_id)
+        .single()
+
+      if (clinicError) {
+        console.error('Error fetching clinic data:', clinicError)
+        throw clinicError
+      }
+
+      setUserClinic(clinicData)
+
+      // Fetch reports for the user's clinic
+      const { data: reportsData, error: reportsError } = await supabase
+        .from('reports')
+        .select(`
+          id,
+          reference_id,
+          status,
+          lab_test_type,
+          processing_lab,
+          invoice_number,
+          sample_collection_date,
+          date_picked_up_by_lab,
+          date_shipped_to_lab,
+          tracking_number,
+          report_completion_date,
+          notes,
+          pdf_url,
+          created_at,
+          patients (
+            first_name,
+            last_name
+          )
+        `)
+        .eq('clinic_id', userData.clinic_id)
+        .order('created_at', { ascending: false })
+
+      if (reportsError) {
+        console.error('Error fetching reports:', reportsError)
+        throw reportsError
+      }
+
+      // Transform reports data
+      const transformedReports = reportsData.map(report => ({
+        id: report.id,
+        referenceId: report.reference_id,
+        title: `${report.reference_id} - ${report.patients?.first_name || 'N/A'} ${report.patients?.last_name || 'N/A'}`,
+        patientName: `${report.patients?.first_name || 'N/A'} ${report.patients?.last_name || 'N/A'}`,
+        status: report.status,
+        testType: report.lab_test_type,
+        processingLab: report.processing_lab,
+        invoice: report.invoice_number,
+        sampleCollectionDate: report.sample_collection_date,
+        datePickedUpByLab: report.date_picked_up_by_lab,
+        dateShippedToLab: report.date_shipped_to_lab,
+        trackingNumber: report.tracking_number,
+        reportCompletionDate: report.report_completion_date,
+        notes: report.notes,
+        pdfUrl: report.pdf_url,
+        createdAt: report.created_at,
+        date: report.created_at,
+        expectedDate: report.report_completion_date,
+        completedDate: report.report_completion_date
+      }))
+
       // Organize reports by status
       const organizedReports = {
-        recent: reportsData.slice(0, 5), // Latest 5 reports
-        pending: reportsData.filter(report => report.status === 'pending'),
-        completed: reportsData.filter(report => report.status === 'completed')
+        recent: transformedReports.slice(0, 5), // Latest 5 reports
+        pending: transformedReports.filter(report => 
+          ['Sample Received', 'Resample Required', 'In Progress'].includes(report.status)
+        ),
+        completed: transformedReports.filter(report => report.status === 'Ready')
       }
       
       setReports(organizedReports)
       
       // Update stats
       setClinicStats({
-        totalReports: reportsData.length,
+        totalReports: transformedReports.length,
         pendingReports: organizedReports.pending.length,
-        completedReports: organizedReports.completed.length,
-        associatedPatients: new Set(reportsData.map(report => report.patientId)).size
+        completedReports: organizedReports.completed.length
       })
-    } catch (error) {
-      console.error('Error fetching reports:', error)
-    }
-  }
 
-  const handleClinicChange = async (clinicId) => {
-    setSelectedClinic(clinicId)
-    await fetchReports(clinicId)
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error)
+      toast.error('Failed to load dashboard data')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleRefresh = async () => {
-    if (selectedClinic) {
-      await fetchReports(selectedClinic)
+    await fetchDashboardData()
+  }
+
+  const handleDownloadPDF = async (report) => {
+    try {
+      if (!report.pdfUrl) {
+        toast.error('No PDF available for this report')
+        return
+      }
+
+      const { data: { signedURL }, error } = await supabase
+        .storage
+        .from('reports')
+        .createSignedUrl(report.pdfUrl, 60)
+
+      if (error) {
+        console.error('Error getting signed URL:', error)
+        throw error
+      }
+
+      window.open(signedURL, '_blank')
+    } catch (error) {
+      console.error('Error downloading PDF:', error)
+      toast.error('Failed to download PDF. Please try again.')
     }
+  }
+
+  const getStatusVariant = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'sample received':
+        return 'bg-blue-500'
+      case 'resample required':
+        return 'bg-yellow-500'
+      case 'in progress':
+        return 'bg-purple-500'
+      case 'ready':
+        return 'bg-green-500'
+      default:
+        return 'bg-gray-500'
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 flex-col min-h-screen bg-background">
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading dashboard...</p>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -120,28 +249,15 @@ export default function ClientDashboard() {
           <div className="flex h-16 items-center justify-between gap-4">
             <div className="flex flex-col">
               <h1 className="text-xl md:text-2xl font-bold tracking-tight">
-                Welcome back, {userDetails?.name?.split(' ')[0] || 'User'}
+                Welcome back, {user?.email?.split('@')[0] || 'User'}
               </h1>
               <p className="text-sm text-muted-foreground">
-                {selectedClinic ? `Viewing reports for ${clinics.find(c => c.id === selectedClinic)?.name}` : 'Select a clinic to view reports'}
+                {userClinic ? `Your clinic: ${userClinic.name}` : 'Client Dashboard'}
               </p>
             </div>
             
             {/* Desktop Actions */}
             <div className="hidden md:flex items-center gap-2">
-              <div className="relative">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="relative"
-                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                >
-                  <IconBell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-[10px] font-medium text-primary-foreground flex items-center justify-center">
-                    3
-                  </span>
-                </Button>
-              </div>
               <Button 
                 variant="outline" 
                 size="sm"
@@ -183,15 +299,6 @@ export default function ClientDashboard() {
                   variant="outline" 
                   size="sm"
                   className="flex-1"
-                  onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-                >
-                  <IconBell className="h-4 w-4 mr-2" />
-                  Notifications
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  className="flex-1"
                   onClick={handleRefresh}
                   disabled={isLoading}
                 >
@@ -212,7 +319,7 @@ export default function ClientDashboard() {
 
       {/* Main Content */}
       <main className="flex-1 container mx-auto px-4 py-6 space-y-6">
-        {/* Search and Filter Bar */}
+        {/* Search Bar */}
         <div className="flex flex-col sm:flex-row gap-4">
           <div className="relative flex-1">
             <IconSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -235,34 +342,15 @@ export default function ClientDashboard() {
           </div>
         </div>
 
-        {/* Clinic Selector */}
-        {clinics.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {clinics.map((clinic) => (
-              <Button
-                key={clinic.id}
-                variant={selectedClinic === clinic.id ? "default" : "outline"}
-                onClick={() => handleClinicChange(clinic.id)}
-                className="h-auto py-2 px-4"
-              >
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">{clinic.name}</span>
-                  <span className="text-xs text-muted-foreground">{clinic.address}</span>
-                </div>
-              </Button>
-            ))}
-          </div>
-        )}
-
         {/* Stats Cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card className="bg-primary/5 hover:bg-primary/10 transition-colors">
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-lg">
                 <IconReportMedical className="h-5 w-5 text-primary" />
                 Total Reports
               </CardTitle>
-              <CardDescription>All reports from this clinic</CardDescription>
+              <CardDescription>All reports from your clinic</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col">
@@ -318,27 +406,6 @@ export default function ClientDashboard() {
               </div>
             </CardContent>
           </Card>
-
-          <Card className="bg-blue-500/5 hover:bg-blue-500/10 transition-colors">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <IconUsers className="h-5 w-5 text-blue-500" />
-                Associated Patients
-              </CardTitle>
-              <CardDescription>Total patients with reports</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col">
-                <div className="text-3xl font-bold mb-4">{clinicStats.associatedPatients}</div>
-                <Button asChild variant="ghost" className="w-full justify-start">
-                  <Link to="/patients" className="flex items-center">
-                    <IconEye className="mr-2 h-4 w-4" />
-                    View Patients
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
         </div>
 
         {/* Reports Tabs */}
@@ -354,10 +421,6 @@ export default function ClientDashboard() {
                 <IconDownload className="mr-2 h-4 w-4" />
                 <span className="hidden sm:inline">Export</span>
               </Button>
-              <Button variant="outline" size="sm" className="flex-1 sm:flex-none">
-                <IconPrinter className="mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Print</span>
-              </Button>
             </div>
           </div>
 
@@ -365,7 +428,7 @@ export default function ClientDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Recent Reports</CardTitle>
-                <CardDescription>Latest reports from this clinic</CardDescription>
+                <CardDescription>Latest reports from your clinic</CardDescription>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px] pr-4">
@@ -386,8 +449,7 @@ export default function ClientDashboard() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge 
-                              variant={report.status === 'completed' ? 'default' : 'secondary'}
-                              className="whitespace-nowrap"
+                              className={`${getStatusVariant(report.status)} text-white`}
                             >
                               {report.status}
                             </Badge>
@@ -415,7 +477,7 @@ export default function ClientDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Pending Reports</CardTitle>
-                <CardDescription>Reports awaiting results</CardDescription>
+                <CardDescription>Reports awaiting results from your clinic</CardDescription>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px] pr-4">
@@ -431,7 +493,7 @@ export default function ClientDashboard() {
                             <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-muted-foreground">
                               <span>Patient: {report.patientName}</span>
                               <span className="hidden sm:inline">•</span>
-                              <span>Expected: {new Date(report.expectedDate).toLocaleDateString()}</span>
+                              <span>Expected: {report.expectedDate ? new Date(report.expectedDate).toLocaleDateString() : 'TBD'}</span>
                             </div>
                           </div>
                           <Button variant="outline" size="sm" asChild>
@@ -457,7 +519,7 @@ export default function ClientDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Completed Reports</CardTitle>
-                <CardDescription>Reports with available results</CardDescription>
+                <CardDescription>Reports with available results from your clinic</CardDescription>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px] pr-4">
@@ -473,20 +535,24 @@ export default function ClientDashboard() {
                             <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm text-muted-foreground">
                               <span>Patient: {report.patientName}</span>
                               <span className="hidden sm:inline">•</span>
-                              <span>Completed: {new Date(report.completedDate).toLocaleDateString()}</span>
+                              <span>Completed: {report.completedDate ? new Date(report.completedDate).toLocaleDateString() : 'N/A'}</span>
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
+                            {report.pdfUrl && (
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                onClick={() => handleDownloadPDF(report)}
+                              >
+                                <IconFileText className="h-4 w-4 mr-2" />
+                                Download PDF
+                              </Button>
+                            )}
                             <Button variant="outline" size="sm" asChild>
-                              <Link to={`/reports/${report.id}/download`}>
-                                <IconDownload className="h-4 w-4 mr-2" />
-                                Download
-                              </Link>
-                            </Button>
-                            <Button variant="outline" size="sm" asChild>
-                              <Link to={`/reports/${report.id}/print`}>
-                                <IconPrinter className="h-4 w-4 mr-2" />
-                                Print
+                              <Link to={`/reports/${report.id}`}>
+                                <IconEye className="h-4 w-4 mr-2" />
+                                View
                               </Link>
                             </Button>
                           </div>

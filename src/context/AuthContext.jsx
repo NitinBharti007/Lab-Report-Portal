@@ -22,6 +22,11 @@ export const AuthProvider = ({ children }) => {
     
     if (error) {
       console.error("Error fetching user details:", error);
+      // If the error is PGRST116 (no rows found), the user doesn't exist in our users table
+      if (error.code === "PGRST116") {
+        console.error("User not found in users table. User may not be properly registered.");
+        return null;
+      }
       return null;
     }
     return data;
@@ -41,7 +46,20 @@ export const AuthProvider = ({ children }) => {
       setUser(session.user);
       setIsAuthenticated(true);
       const details = await fetchUserDetails(session.user.id);
-      setUserDetails(details);
+      
+      if (details) {
+        setUserDetails(details);
+      } else {
+        // If user details can't be fetched, log out the user and redirect to login
+        console.error("User details not found. Logging out user.");
+        setUser(null);
+        setUserDetails(null);
+        setIsAuthenticated(false);
+        await supabase.auth.signOut();
+        if (!isAuthRoute) {
+          navigate('/login', { replace: true });
+        }
+      }
     } else {
       setUser(null);
       setUserDetails(null);

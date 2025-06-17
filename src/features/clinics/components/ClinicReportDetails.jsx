@@ -26,10 +26,12 @@ import UpdateClinicReportDialog from "./UpdateClinicReportDialog"
 import { toast } from "react-hot-toast"
 import { supabase } from "@/lib/supabaseClient"
 import { Loader } from "@/components/shared/loader"
+import { useAuth } from "@/context/AuthContext"
 
 export default function ClinicReportDetails({ report: initialReport, onBack: initialOnBack, onUpdate: initialOnUpdate, onDelete: initialOnDelete }) {
   const { reportId } = useParams()
   const navigate = useNavigate()
+  const { userDetails } = useAuth()
   const [isUpdateDialogOpen, setIsUpdateDialogOpen] = useState(false)
   const [currentReport, setCurrentReport] = useState(initialReport)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -241,56 +243,59 @@ export default function ClinicReportDetails({ report: initialReport, onBack: ini
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setIsUpdateDialogOpen(true)}
-            className="flex-1 sm:flex-none"
-          >
-            <IconPencil className="h-4 w-4 mr-2" />
-            Update Report
-          </Button>
-          <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleDeleteClick}
-                className="flex-1 sm:flex-none"
-              >
-                <IconTrash className="h-4 w-4 mr-2" />
-                Delete Report
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This action cannot be undone. This will permanently delete the report
-                  and remove it from our servers.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={handleDeleteConfirm}
-                  disabled={isDeleting}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+        {/* Only show Update and Delete buttons for admin users */}
+        {userDetails?.role === 'admin' && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsUpdateDialogOpen(true)}
+              className="flex-1 sm:flex-none"
+            >
+              <IconPencil className="h-4 w-4 mr-2" />
+              Update Report
+            </Button>
+            <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleDeleteClick}
+                  className="flex-1 sm:flex-none"
                 >
-                  {isDeleting ? (
-                    <>
-                      <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Deleting...
-                    </>
-                  ) : (
-                    'Delete Report'
-                  )}
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+                  <IconTrash className="h-4 w-4 mr-2" />
+                  Delete Report
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This action cannot be undone. This will permanently delete the report
+                    and remove it from our servers.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteConfirm}
+                    disabled={isDeleting}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Deleting...
+                      </>
+                    ) : (
+                      'Delete Report'
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        )}
       </div>
 
       <Separator />
@@ -368,13 +373,16 @@ export default function ClinicReportDetails({ report: initialReport, onBack: ini
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="associatedClinic">Associated Clinic</Label>
-                <div className="flex items-center gap-2 text-sm sm:text-base">
-                  <IconBuilding className="h-4 w-4 text-muted-foreground" />
-                  <span>{currentReport.associatedClinic || 'N/A'}</span>
+              {/* Only show Associated Clinic for admin users */}
+              {userDetails?.role === 'admin' && (
+                <div className="space-y-2">
+                  <Label htmlFor="associatedClinic">Associated Clinic</Label>
+                  <div className="flex items-center gap-2 text-sm sm:text-base">
+                    <IconBuilding className="h-4 w-4 text-muted-foreground" />
+                    <span>{currentReport.associatedClinic || 'N/A'}</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -468,13 +476,15 @@ export default function ClinicReportDetails({ report: initialReport, onBack: ini
         </Card>
       </div>
 
-      {/* Update Dialog */}
-      <UpdateClinicReportDialog
-        report={currentReport}
-        isOpen={isUpdateDialogOpen}
-        onClose={() => setIsUpdateDialogOpen(false)}
-        onSubmit={handleUpdateSuccess}
-      />
+      {/* Only show Update Report dialog for admin users */}
+      {userDetails?.role === 'admin' && (
+        <UpdateClinicReportDialog
+          isOpen={isUpdateDialogOpen}
+          onClose={() => setIsUpdateDialogOpen(false)}
+          onSubmit={handleUpdateSuccess}
+          report={currentReport}
+        />
+      )}
     </div>
   )
 } 

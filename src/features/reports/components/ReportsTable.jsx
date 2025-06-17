@@ -35,7 +35,8 @@ export default function ReportsTable({
   onView, 
   onUpdate, 
   onDelete,
-  onDownloadPDF
+  onDownloadPDF,
+  userRole
 }) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [reportToDelete, setReportToDelete] = useState(null)
@@ -126,17 +127,20 @@ export default function ReportsTable({
                     </span>
                   </div>
                 </TableHead>
-                <TableHead 
-                  className="whitespace-nowrap cursor-pointer group"
-                  onClick={() => onSort('associatedClinic')}
-                >
-                  <div className="flex items-center">
-                    Associated Clinic
-                    <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      {getSortIcon('associatedClinic')}
-                    </span>
-                  </div>
-                </TableHead>
+                {/* Only show Associated Clinic column for admin users */}
+                {userRole === 'admin' && (
+                  <TableHead 
+                    className="whitespace-nowrap cursor-pointer group"
+                    onClick={() => onSort('associatedClinic')}
+                  >
+                    <div className="flex items-center">
+                      Associated Clinic
+                      <span className="ml-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {getSortIcon('associatedClinic')}
+                      </span>
+                    </div>
+                  </TableHead>
+                )}
                 <TableHead 
                   className="whitespace-nowrap cursor-pointer group"
                   onClick={() => onSort('testType')}
@@ -194,7 +198,10 @@ export default function ReportsTable({
                   </TableCell>
                   <TableCell className="whitespace-nowrap">{report.lastName}</TableCell>
                   <TableCell className="whitespace-nowrap">{report.firstName}</TableCell>
-                  <TableCell className="whitespace-nowrap">{report.associatedClinic}</TableCell>
+                  {/* Only show Associated Clinic cell for admin users */}
+                  {userRole === 'admin' && (
+                    <TableCell className="whitespace-nowrap">{report.associatedClinic}</TableCell>
+                  )}
                   <TableCell className="whitespace-nowrap">{report.testType}</TableCell>
                   <TableCell className="whitespace-nowrap">
                     {report.reportCompletionDate ? new Date(report.reportCompletionDate).toLocaleDateString() : 'N/A'}
@@ -214,20 +221,26 @@ export default function ReportsTable({
                           <IconEye className="h-4 w-4 mr-2" />
                           View
                         </DropdownMenuItem>
-                        {report.pdf_url && (
+                        {/* Only show Download PDF for client users */}
+                        {userRole !== 'admin' && report.pdf_url && (
                           <DropdownMenuItem onClick={() => onDownloadPDF(report)}>
                             <IconDownload className="h-4 w-4 mr-2" />
                             Download PDF
                           </DropdownMenuItem>
                         )}
-                        <DropdownMenuItem onClick={() => onUpdate(report)}>
-                          <IconPencil className="h-4 w-4 mr-2" />
-                          Update
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleDeleteClick(report)}>
-                          <IconTrash className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
+                        {/* Only show Update and Delete options for admin users */}
+                        {userRole === 'admin' && (
+                          <>
+                            <DropdownMenuItem onClick={() => onUpdate(report)}>
+                              <IconPencil className="h-4 w-4 mr-2" />
+                              Update
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDeleteClick(report)}>
+                              <IconTrash className="h-4 w-4 mr-2" />
+                              Delete
+                            </DropdownMenuItem>
+                          </>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
