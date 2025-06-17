@@ -370,8 +370,9 @@ export default function SingleClinic() {
       e.stopPropagation();
     }
     
-    if (userDetails?.role !== 'admin') {
-      toast.error('Only administrators can edit clinics')
+    // Allow if user is admin or if user is linked to this clinic
+    if (userDetails?.role !== 'admin' && userDetails?.clinic_id !== clinicId) {
+      toast.error('You can only edit your linked clinic')
       return
     }
     

@@ -292,20 +292,21 @@ export default function Clinics() {
         throw new Error('Please log in to edit a clinic')
       }
 
-      // Check if user is an admin
+      // Check user's role and clinic association
       const { data: userData, error: userError } = await supabase
         .from('users')
-        .select('role')
+        .select('role, clinic_id')
         .eq('user_id', user.id)
         .single()
 
       if (userError) {
-        console.error('Error checking user role:', userError)
+        console.error('Error checking user data:', userError)
         throw userError
       }
 
-      if (!userData || userData.role !== 'admin') {
-        throw new Error('Only administrators can edit clinics')
+      // Allow if user is admin or if user is linked to the clinic being edited
+      if (!userData || (userData.role !== 'admin' && userData.clinic_id !== editingClinic.id)) {
+        throw new Error('You can only edit your linked clinic')
       }
 
       console.log('Editing clinic:', editingClinic)
