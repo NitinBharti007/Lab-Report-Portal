@@ -25,21 +25,9 @@ import {
   IconFileText,
   IconChartBar,
   IconRefresh,
-  IconBell,
-  IconSettings,
-  IconAlertCircle,
-  IconCircleCheck,
-  IconDatabase,
-  IconServer,
-  IconShield,
   IconChartLine,
   IconChartPie,
-  IconChartDots,
-  IconSearch,
-  IconFilter,
-  IconDownload,
-  IconPrinter,
-  IconMail
+  IconChartDots
 } from "@tabler/icons-react"
 import { Link } from "react-router-dom"
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart"
@@ -54,6 +42,9 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Progress } from "@/components/ui/progress"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
+import PatientForm from "@/features/patients/components/PatientForm"
+import ClinicForm from "@/features/clinics/components/ClinicForm"
+import AddReportDialog from "@/features/reports/components/AddReportDialog"
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042']
 
@@ -77,28 +68,18 @@ export default function AdminDashboard() {
   const [recentActivity, setRecentActivity] = useState([])
   const [topClinics, setTopClinics] = useState([])
   const { user, userDetails } = useAuth()
-  const [systemHealth, setSystemHealth] = useState({
-    database: 'healthy',
-    server: 'healthy',
-    security: 'healthy',
-    lastChecked: new Date()
-  })
-  const [notifications, setNotifications] = useState([])
-  const [quickStats, setQuickStats] = useState({
-    pendingReports: 0,
-    criticalAlerts: 0,
-    systemUpdates: 0,
-    activeUsers: 0
-  })
   const [patientHistogram, setPatientHistogram] = useState([])
   const [reportsPerClinic, setReportsPerClinic] = useState([])
   const [reportCreationTrend, setReportCreationTrend] = useState([])
 
+  // Form states
+  const [isPatientFormOpen, setIsPatientFormOpen] = useState(false)
+  const [isClinicFormOpen, setIsClinicFormOpen] = useState(false)
+  const [isReportFormOpen, setIsReportFormOpen] = useState(false)
+
   useEffect(() => {
     if (user) {
       fetchDashboardData()
-      fetchSystemHealth()
-      fetchNotifications()
     }
   }, [user])
 
@@ -329,41 +310,63 @@ export default function AdminDashboard() {
     return value >= 0 ? <IconArrowUpRight className="h-4 w-4" /> : <IconArrowDownRight className="h-4 w-4" />
   }
 
-  // Add new function to fetch system health
-  const fetchSystemHealth = async () => {
-    // Simulate system health check
-    setSystemHealth({
-      database: Math.random() > 0.1 ? 'healthy' : 'warning',
-      server: Math.random() > 0.1 ? 'healthy' : 'warning',
-      security: Math.random() > 0.1 ? 'healthy' : 'warning',
-      lastChecked: new Date()
-    })
+  // Form submission handlers
+  const handlePatientSubmit = async (data) => {
+    try {
+      const { error } = await supabase
+        .from('patients')
+        .insert([data])
+
+      if (error) throw error
+
+      toast.success('Patient added successfully!')
+      setIsPatientFormOpen(false)
+      fetchDashboardData() // Refresh dashboard data
+    } catch (error) {
+      console.error('Error adding patient:', error)
+      toast.error('Failed to add patient')
+    }
   }
 
-  // Add new function to fetch notifications
-  const fetchNotifications = async () => {
-    // Simulate notifications
-    setNotifications([
-      {
-        id: 1,
-        type: 'alert',
-        message: 'System maintenance scheduled for tomorrow',
-        timestamp: new Date(Date.now() - 3600000)
-      },
-      {
-        id: 2,
-        type: 'update',
-        message: 'New clinic registration request',
-        timestamp: new Date(Date.now() - 7200000)
-      }
-    ])
+  const handleClinicSubmit = async (data) => {
+    try {
+      const { error } = await supabase
+        .from('clinics')
+        .insert([data])
+
+      if (error) throw error
+
+      toast.success('Clinic added successfully!')
+      setIsClinicFormOpen(false)
+      fetchDashboardData() // Refresh dashboard data
+    } catch (error) {
+      console.error('Error adding clinic:', error)
+      toast.error('Failed to add clinic')
+    }
+  }
+
+  const handleReportSubmit = async (data) => {
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .insert([data])
+
+      if (error) throw error
+
+      toast.success('Report added successfully!')
+      setIsReportFormOpen(false)
+      fetchDashboardData() // Refresh dashboard data
+    } catch (error) {
+      console.error('Error adding report:', error)
+      toast.error('Failed to add report')
+    }
   }
 
   if (isLoading) {
     return (
       <div className="flex flex-col gap-4 p-4">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {[...Array(4)].map((_, i) => (
+        <div className="grid gap-4 md:grid-cols-3">
+          {[...Array(3)].map((_, i) => (
             <Card key={i}>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <Skeleton className="h-4 w-[100px]" />
@@ -418,114 +421,13 @@ export default function AdminDashboard() {
                         <IconRefresh className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                         <span className="sr-only">Refresh</span>
                       </Button>
-                      {/* <Button 
-                        variant="ghost" 
-                        size="icon"
-                        className="h-9 w-9"
-                      >
-                        <IconSettings className="h-4 w-4" />
-                        <span className="sr-only">Settings</span>
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        className="h-9 w-9 relative"
-                      >
-                        <IconBell className="h-4 w-4" />
-                        {notifications.length > 0 && (
-                          <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-[10px] text-white flex items-center justify-center">
-                            {notifications.length}
-                          </span>
-                        )}
-                        <span className="sr-only">Notifications</span>
-                      </Button> */}
                     </div>
                   </div>
                 </div>
               </header>
 
-              {/* Quick Stats Row */}
-              {/* <div className="grid gap-4 md:grid-cols-4">
-                <Card className="bg-blue-50 dark:bg-blue-950">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">System Health</CardTitle>
-                    <IconServer className="h-4 w-4 text-blue-500" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center gap-2">
-                      <IconCircleCheck className="h-5 w-5 text-green-500" />
-                      <span className="text-sm">All systems operational</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Last checked: {systemHealth.lastChecked.toLocaleTimeString()}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-purple-50 dark:bg-purple-950">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Active Users</CardTitle>
-                    <IconUsers className="h-4 w-4 text-purple-500" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{quickStats.activeUsers}</div>
-                    <p className="text-xs text-muted-foreground">Currently online</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-orange-50 dark:bg-orange-950">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Pending Reports</CardTitle>
-                    <IconFileText className="h-4 w-4 text-orange-500" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{quickStats.pendingReports}</div>
-                    <p className="text-xs text-muted-foreground">Require attention</p>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-red-50 dark:bg-red-950">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Critical Alerts</CardTitle>
-                    <IconAlertCircle className="h-4 w-4 text-red-500" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{quickStats.criticalAlerts}</div>
-                    <p className="text-xs text-muted-foreground">Need immediate action</p>
-                  </CardContent>
-                </Card>
-              </div> */}
-
-              {/* Quick Actions */}
-              {/* <div className="grid gap-4 md:grid-cols-6">
-                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
-                  <IconPlus className="h-6 w-6" />
-                  <span>New Patient</span>
-                </Button>
-                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
-                  <IconHospital className="h-6 w-6" />
-                  <span>New Clinic</span>
-                </Button>
-                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
-                  <IconReportMedical className="h-6 w-6" />
-                  <span>New Report</span>
-                </Button>
-                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
-                  <IconDownload className="h-6 w-6" />
-                  <span>Export Data</span>
-                </Button>
-                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
-                  <IconPrinter className="h-6 w-6" />
-                  <span>Print Reports</span>
-                </Button>
-                <Button variant="outline" className="flex flex-col items-center justify-center h-24 gap-2">
-                  <IconMail className="h-6 w-6" />
-                  <span>Send Alerts</span>
-                </Button>
-              </div> */}
-
               {/* Overview Stats Cards */}
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-3">
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Total Patients</CardTitle>
@@ -599,8 +501,8 @@ export default function AdminDashboard() {
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="overview" className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
+                <TabsContent value="overview" className="space-y-6">
+                  <div className="grid gap-6 md:grid-cols-2">
                     {/* Patient Trends Chart */}
                     <Card>
                       <CardHeader>
@@ -690,7 +592,91 @@ export default function AdminDashboard() {
                     </Card>
                   </div>
 
-                  <div className="grid gap-4 md:grid-cols-2">
+                  <div className="grid gap-6 md:grid-cols-2">
+                    {/* Patient Registrations Histogram */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Patient Registrations (Histogram)</CardTitle>
+                        <CardDescription>Registrations per month (last 12 months)</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[300px]">
+                          {patientHistogram && patientHistogram.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={patientHistogram}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} />
+                                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                                <Tooltip content={<ChartTooltipContent />} />
+                                <Bar dataKey="count" fill="#8884d8" radius={[4, 4, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="flex items-center justify-center h-full">
+                              <p className="text-muted-foreground">No data available</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    {/* Reports per Clinic Bar Chart */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Reports per Clinic</CardTitle>
+                        <CardDescription>Number of reports by clinic</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[300px]">
+                          {reportsPerClinic && reportsPerClinic.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={reportsPerClinic} layout="vertical">
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                                <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={120} />
+                                <Tooltip content={<ChartTooltipContent />} />
+                                <Bar dataKey="reports" fill="#00C49F" radius={[0, 4, 4, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="flex items-center justify-center h-full">
+                              <p className="text-muted-foreground">No data available</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-1">
+                    {/* Report Creation Trend Line Chart */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Report Creation Trend</CardTitle>
+                        <CardDescription>Reports created per month (last 12 months)</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[300px]">
+                          {reportCreationTrend && reportCreationTrend.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={reportCreationTrend}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} />
+                                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                                <Tooltip content={<ChartTooltipContent />} />
+                                <Line type="monotone" dataKey="count" stroke="#FF8042" strokeWidth={2} dot={{ r: 4 }} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="flex items-center justify-center h-full">
+                              <p className="text-muted-foreground">No data available</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid gap-6 md:grid-cols-2">
                     {/* Top Performing Clinics */}
                     <Card>
                       <CardHeader>
@@ -775,188 +761,86 @@ export default function AdminDashboard() {
                       </CardContent>
                     </Card>
                   </div>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {/* Patient Registrations Histogram */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Patient Registrations (Histogram)</CardTitle>
-                        <CardDescription>Registrations per month (last 12 months)</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="h-[300px]">
-                          {patientHistogram && patientHistogram.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={patientHistogram}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} />
-                                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-                                <Tooltip content={<ChartTooltipContent />} />
-                                <Bar dataKey="count" fill="#8884d8" radius={[4, 4, 0, 0]} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          ) : (
-                            <div className="flex items-center justify-center h-full">
-                              <p className="text-muted-foreground">No data available</p>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                    {/* Reports per Clinic Bar Chart */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Reports per Clinic</CardTitle>
-                        <CardDescription>Number of reports by clinic</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="h-[300px]">
-                          {reportsPerClinic && reportsPerClinic.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={reportsPerClinic} layout="vertical">
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis type="number" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-                                <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={120} />
-                                <Tooltip content={<ChartTooltipContent />} />
-                                <Bar dataKey="reports" fill="#00C49F" radius={[0, 4, 4, 0]} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          ) : (
-                            <div className="flex items-center justify-center h-full">
-                              <p className="text-muted-foreground">No data available</p>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  <div className="grid gap-4 md:grid-cols-1">
-                    {/* Report Creation Trend Line Chart */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Report Creation Trend</CardTitle>
-                        <CardDescription>Reports created per month (last 12 months)</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="h-[300px]">
-                          {reportCreationTrend && reportCreationTrend.length > 0 ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={reportCreationTrend}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} />
-                                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-                                <Tooltip content={<ChartTooltipContent />} />
-                                <Line type="monotone" dataKey="count" stroke="#FF8042" strokeWidth={2} dot={{ r: 4 }} />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          ) : (
-                            <div className="flex items-center justify-center h-full">
-                              <p className="text-muted-foreground">No data available</p>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
                 </TabsContent>
 
-                <TabsContent value="patients" className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Patient Management</CardTitle>
-                      <CardDescription>View and manage patient records</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="text-2xl font-bold">{stats.totalPatients} Total Patients</div>
-                        <Button asChild>
-                          <Link to="/patients">
+                <TabsContent value="patients" className="space-y-6">
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Patient Management</CardTitle>
+                        <CardDescription>View and manage patient records</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="text-2xl font-bold">{stats.totalPatients} Total Patients</div>
+                          <Button onClick={() => setIsPatientFormOpen(true)}>
                             <IconPlus className="mr-2 h-4 w-4" />
                             Add New Patient
-                          </Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
+                          </Button>
+                        </div>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div>
+                              <h3 className="font-medium">Quick Actions</h3>
+                              <p className="text-sm text-muted-foreground">Manage patient data</p>
+                            </div>
+                            <Button variant="outline" asChild>
+                              <Link to="/patients">View All Patients</Link>
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
 
-                <TabsContent value="clinics" className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Clinic Management</CardTitle>
-                      <CardDescription>View and manage clinic locations</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="text-2xl font-bold">{stats.totalClinics} Active Clinics</div>
-                        <Button asChild>
-                          <Link to="/clinics">
-                            <IconPlus className="mr-2 h-4 w-4" />
-                            Add New Clinic
-                          </Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                <TabsContent value="reports" className="space-y-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Report Management</CardTitle>
-                      <CardDescription>View and manage medical reports</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex justify-between items-center mb-4">
-                        <div className="text-2xl font-bold">{stats.totalReports} Total Reports</div>
-                        <Button asChild>
-                          <Link to="/reports">
-                            <IconPlus className="mr-2 h-4 w-4" />
-                            Generate New Report
-                          </Link>
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </TabsContent>
-
-                {/* Add System Status Tab */}
-                <TabsContent value="system" className="space-y-4">
-                  <div className="grid gap-4 md:grid-cols-2">
                     <Card>
                       <CardHeader>
-                        <CardTitle>System Health</CardTitle>
-                        <CardDescription>Current system status and performance</CardDescription>
+                        <CardTitle>Recent Patients</CardTitle>
+                        <CardDescription>Latest patient registrations</CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <IconDatabase className="h-5 w-5" />
-                              <span>Database Status</span>
-                            </div>
-                            <Badge variant={systemHealth.database === 'healthy' ? 'success' : 'destructive'}>
-                              {systemHealth.database}
-                            </Badge>
+                          <div className="text-center py-8">
+                            <IconUsers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                            <p className="text-muted-foreground">Patient data will appear here</p>
+                            <Button 
+                              variant="outline" 
+                              className="mt-4"
+                              onClick={() => setIsPatientFormOpen(true)}
+                            >
+                              <IconPlus className="mr-2 h-4 w-4" />
+                              Add First Patient
+                            </Button>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <IconServer className="h-5 w-5" />
-                              <span>Server Status</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="clinics" className="space-y-6">
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Clinic Management</CardTitle>
+                        <CardDescription>View and manage clinic locations</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="text-2xl font-bold">{stats.totalClinics} Active Clinics</div>
+                          <Button onClick={() => setIsClinicFormOpen(true)}>
+                            <IconPlus className="mr-2 h-4 w-4" />
+                            Add New Clinic
+                          </Button>
+                        </div>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div>
+                              <h3 className="font-medium">Quick Actions</h3>
+                              <p className="text-sm text-muted-foreground">Manage clinic data</p>
                             </div>
-                            <Badge variant={systemHealth.server === 'healthy' ? 'success' : 'destructive'}>
-                              {systemHealth.server}
-                            </Badge>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <IconShield className="h-5 w-5" />
-                              <span>Security Status</span>
-                            </div>
-                            <Badge variant={systemHealth.security === 'healthy' ? 'success' : 'destructive'}>
-                              {systemHealth.security}
-                            </Badge>
+                            <Button variant="outline" asChild>
+                              <Link to="/clinics">View All Clinics</Link>
+                            </Button>
                           </div>
                         </div>
                       </CardContent>
@@ -964,33 +848,78 @@ export default function AdminDashboard() {
 
                     <Card>
                       <CardHeader>
-                        <CardTitle>Recent Notifications</CardTitle>
-                        <CardDescription>Latest system alerts and updates</CardDescription>
+                        <CardTitle>Recent Clinics</CardTitle>
+                        <CardDescription>Latest clinic registrations</CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <ScrollArea className="h-[200px]">
-                          <div className="space-y-4">
-                            {notifications.map((notification) => (
-                              <div key={notification.id} className="flex items-start gap-4">
-                                <div className={`p-2 rounded-full ${
-                                  notification.type === 'alert' ? 'bg-red-100' : 'bg-blue-100'
-                                }`}>
-                                  {notification.type === 'alert' ? (
-                                    <IconAlertCircle className="h-4 w-4 text-red-500" />
-                                  ) : (
-                                    <IconBell className="h-4 w-4 text-blue-500" />
-                                  )}
-                                </div>
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium">{notification.message}</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {notification.timestamp.toLocaleString()}
-                                  </p>
-                                </div>
-                              </div>
-                            ))}
+                        <div className="space-y-4">
+                          <div className="text-center py-8">
+                            <IconHospital className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                            <p className="text-muted-foreground">Clinic data will appear here</p>
+                            <Button 
+                              variant="outline" 
+                              className="mt-4"
+                              onClick={() => setIsClinicFormOpen(true)}
+                            >
+                              <IconPlus className="mr-2 h-4 w-4" />
+                              Add First Clinic
+                            </Button>
                           </div>
-                        </ScrollArea>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="reports" className="space-y-6">
+                  <div className="grid gap-6 md:grid-cols-2">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Report Management</CardTitle>
+                        <CardDescription>View and manage medical reports</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex justify-between items-center mb-4">
+                          <div className="text-2xl font-bold">{stats.totalReports} Total Reports</div>
+                          <Button onClick={() => setIsReportFormOpen(true)}>
+                            <IconPlus className="mr-2 h-4 w-4" />
+                            Generate New Report
+                          </Button>
+                        </div>
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div>
+                              <h3 className="font-medium">Quick Actions</h3>
+                              <p className="text-sm text-muted-foreground">Manage report data</p>
+                            </div>
+                            <Button variant="outline" asChild>
+                              <Link to="/reports">View All Reports</Link>
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Recent Reports</CardTitle>
+                        <CardDescription>Latest report generations</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="text-center py-8">
+                            <IconReportMedical className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                            <p className="text-muted-foreground">Report data will appear here</p>
+                            <Button 
+                              variant="outline" 
+                              className="mt-4"
+                              onClick={() => setIsReportFormOpen(true)}
+                            >
+                              <IconPlus className="mr-2 h-4 w-4" />
+                              Generate First Report
+                            </Button>
+                          </div>
+                        </div>
                       </CardContent>
                     </Card>
                   </div>
@@ -1000,6 +929,28 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Form Components */}
+      <PatientForm
+        open={isPatientFormOpen}
+        onOpenChange={setIsPatientFormOpen}
+        onSubmit={handlePatientSubmit}
+        onCancel={() => setIsPatientFormOpen(false)}
+        mode="add"
+      />
+
+      <ClinicForm
+        isOpen={isClinicFormOpen}
+        onClose={() => setIsClinicFormOpen(false)}
+        onSubmit={handleClinicSubmit}
+        mode="add"
+      />
+
+      <AddReportDialog
+        isOpen={isReportFormOpen}
+        onClose={() => setIsReportFormOpen(false)}
+        onSubmit={handleReportSubmit}
+      />
     </div>
   )
 } 
