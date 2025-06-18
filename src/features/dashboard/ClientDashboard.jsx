@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils"
 import { Loader } from "@/components/shared/loader"
 
 export default function ClientDashboard() {
-  const { user } = useAuth()
+  const { user, userDetails } = useAuth()
   const [isLoading, setIsLoading] = useState(true)
   const [reports, setReports] = useState({
     recent: [],
@@ -51,13 +51,148 @@ export default function ClientDashboard() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+  const [userClinicId, setUserClinicId] = useState(null)
+  const [isRealTimeUpdating, setIsRealTimeUpdating] = useState(false)
 
   useEffect(() => {
+    if (user && userDetails) {
     fetchDashboardData()
-  }, [])
+    }
+  }, [user, userDetails])
+
+  // Set up real-time subscriptions
+  useEffect(() => {
+    if (!userClinicId) return
+
+    console.log('Setting up real-time subscriptions for clinic:', userClinicId)
+
+    // Subscribe to reports changes for the user's clinic
+    // This ensures the dashboard updates automatically when:
+    // - New reports are added to the clinic
+    // - Report statuses are updated
+    // - Report details are modified
+    const reportsSubscription = supabase
+      .channel('reports-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'reports',
+          filter: `clinic_id=eq.${userClinicId}`
+        },
+        (payload) => {
+          console.log('Reports change detected:', payload)
+          // Show real-time update indicator
+          setIsRealTimeUpdating(true)
+          // Show toast notification
+          toast.success('Dashboard updated with latest data', {
+            duration: 2000,
+            position: 'top-right'
+          })
+          // Refresh dashboard data when reports change
+          fetchDashboardData().finally(() => {
+            // Hide indicator after update
+            setTimeout(() => setIsRealTimeUpdating(false), 2000)
+          })
+        }
+      )
+      .subscribe()
+
+    // Subscribe to clinic information changes
+    // This ensures the dashboard updates when clinic details are modified
+    const clinicSubscription = supabase
+      .channel('clinic-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'clinics',
+          filter: `id=eq.${userClinicId}`
+        },
+        (payload) => {
+          console.log('Clinic change detected:', payload)
+          // Show real-time update indicator
+          setIsRealTimeUpdating(true)
+          // Show toast notification
+          toast.success('Clinic information updated', {
+            duration: 2000,
+            position: 'top-right'
+          })
+          // Refresh clinic data when clinic information changes
+          fetchClinicData().finally(() => {
+            // Hide indicator after update
+            setTimeout(() => setIsRealTimeUpdating(false), 2000)
+          })
+        }
+      )
+      .subscribe()
+
+    // Subscribe to user details changes
+    // This ensures the dashboard updates when user information is modified
+    // (e.g., after password reset, role changes, etc.)
+    const userSubscription = supabase
+      .channel('user-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'users',
+          filter: `user_id=eq.${user?.id}`
+        },
+        (payload) => {
+          console.log('User change detected:', payload)
+          // Show real-time update indicator
+          setIsRealTimeUpdating(true)
+          // Refresh dashboard data when user details change
+          fetchDashboardData().finally(() => {
+            // Hide indicator after update
+            setTimeout(() => setIsRealTimeUpdating(false), 2000)
+          })
+        }
+      )
+      .subscribe()
+
+    // Cleanup subscriptions on unmount or when userClinicId changes
+    // This prevents memory leaks and ensures proper cleanup
+    return () => {
+      console.log('Cleaning up real-time subscriptions')
+      supabase.removeChannel(reportsSubscription)
+      supabase.removeChannel(clinicSubscription)
+      supabase.removeChannel(userSubscription)
+    }
+  }, [userClinicId, user?.id])
+
+  const fetchClinicData = async () => {
+    if (!userClinicId) return
+
+    try {
+      const { data: clinicData, error: clinicError } = await supabase
+        .from('clinics')
+        .select('id, name, address')
+        .eq('id', userClinicId)
+        .single()
+
+      if (clinicError) {
+        console.error('Error fetching clinic data:', clinicError)
+        return
+      }
+
+      setUserClinic(clinicData)
+    } catch (error) {
+      console.error('Error fetching clinic data:', error)
+    }
+  }
 
   const fetchDashboardData = async () => {
     try {
+      console.log('🔄 Fetching dashboard data...', { 
+        userId: user?.id, 
+        userDetails: !!userDetails,
+        userClinicId 
+      })
       setIsLoading(true)
       
       if (!user) {
@@ -91,6 +226,9 @@ export default function ClientDashboard() {
         toast.error('No clinic assigned to your account. Please contact your administrator.')
         return
       }
+
+      // Set clinic ID for real-time subscriptions
+      setUserClinicId(userData.clinic_id)
 
       // Get clinic information
       const { data: clinicData, error: clinicError } = await supabase
@@ -178,6 +316,13 @@ export default function ClientDashboard() {
         completedReports: organizedReports.completed.length
       })
 
+      console.log('✅ Dashboard data fetched successfully', {
+        totalReports: transformedReports.length,
+        pendingReports: organizedReports.pending.length,
+        completedReports: organizedReports.completed.length,
+        clinicName: clinicData?.name
+      })
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error)
       toast.error('Failed to load dashboard data')
@@ -233,6 +378,11 @@ export default function ClientDashboard() {
     return <Loader message="Loading dashboard..." />
   }
 
+  // Show loading if userDetails are not yet available
+  if (!userDetails) {
+    return <Loader message="Loading user details..." />
+  }
+
   return (
     <div className="flex flex-1 flex-col min-h-screen bg-background">
       {/* Header */}
@@ -246,6 +396,12 @@ export default function ClientDashboard() {
               <p className="text-sm text-muted-foreground">
                 {userClinic ? `Your clinic: ${userClinic.name}` : 'Client Dashboard'}
               </p>
+              {isRealTimeUpdating && (
+                <div className="flex items-center gap-2 mt-1">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs text-green-600 font-medium">Live updates active</span>
+                </div>
+              )}
             </div>
             
             {/* Desktop Actions */}
@@ -255,10 +411,12 @@ export default function ClientDashboard() {
                 size="sm"
                 onClick={handleRefresh}
                 disabled={isLoading}
-                className="gap-2"
+                className={cn("gap-2", isRealTimeUpdating && "border-green-500 text-green-600")}
               >
-                <IconRefresh className={cn("h-4 w-4", isLoading && "animate-spin")} />
-                <span className="hidden sm:inline">Refresh</span>
+                <IconRefresh className={cn("h-4 w-4", (isLoading || isRealTimeUpdating) && "animate-spin")} />
+                <span className="hidden sm:inline">
+                  {isRealTimeUpdating ? "Updating..." : "Refresh"}
+                </span>
               </Button>
               <Button variant="outline" size="sm" asChild>
                 <Link to="/account">
@@ -294,8 +452,8 @@ export default function ClientDashboard() {
                   onClick={handleRefresh}
                   disabled={isLoading}
                 >
-                  <IconRefresh className={cn("h-4 w-4 mr-2", isLoading && "animate-spin")} />
-                  Refresh
+                  <IconRefresh className={cn("h-4 w-4 mr-2", (isLoading || isRealTimeUpdating) && "animate-spin")} />
+                  {isRealTimeUpdating ? "Updating..." : "Refresh"}
                 </Button>
               </div>
               <Button variant="outline" size="sm" className="w-full" asChild>

@@ -110,13 +110,42 @@ serve(async (req) => {
 
     const existingUser = authData?.users?.[0]
 
-    if (existingUser) {
+    console.log('Auth check details:', {
+      email,
+      foundUser: !!existingUser,
+      existingUserId: existingUser?.id,
+      existingUserEmail: existingUser?.email,
+      authDataUsers: authData?.users?.length || 0,
+      emailMatches: existingUser?.email === email
+    })
+
+    // Check if we have a valid existing user with matching email
+    const validExistingUser = existingUser && existingUser.email === email ? existingUser : null
+
+    if (validExistingUser) {
+      console.log('Email matches, proceeding with existing user')
+    } else if (existingUser) {
+      console.log('Email mismatch detected:', {
+        requestedEmail: email,
+        foundUserEmail: existingUser.email
+      })
+    }
+
+    if (validExistingUser) {
       // Check if user exists in users table
       const { data: existingDbUser, error: userError } = await supabase
         .from('users')
-        .select('id, clinic_id')
-        .eq('user_id', existingUser.id)
+        .select('id, clinic_id, name')
+        .eq('user_id', validExistingUser.id)
         .single()
+
+      console.log('Users table check:', {
+        existingDbUser: !!existingDbUser,
+        existingDbUserId: existingDbUser?.id,
+        existingDbUserClinicId: existingDbUser?.clinic_id,
+        existingDbUserName: existingDbUser?.name,
+        userError: userError?.message
+      })
 
       if (userError && userError.code !== 'PGRST116') {
         console.error('Error checking existing user:', userError)
@@ -134,6 +163,12 @@ serve(async (req) => {
 
       if (existingDbUser) {
         // User exists in both auth and users table
+        console.log('User exists in both tables:', {
+          requestedClinicId: clinic_id,
+          existingClinicId: existingDbUser.clinic_id,
+          isAlreadyAssociated: existingDbUser.clinic_id === clinic_id
+        })
+        
         if (existingDbUser.clinic_id === clinic_id) {
           return new Response(JSON.stringify({ 
             error: 'User already associated',
@@ -147,41 +182,7 @@ serve(async (req) => {
           })
         }
 
-        // Update both auth metadata and users table
-        const updateAuthResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users/${existingUser.id}`, {
-          method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${supabaseServiceKey}`,
-            'apikey': supabaseServiceKey,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            user_metadata: {
-              name: name || existingDbUser.name,
-              clinic_id,
-              clinic_name
-            }
-          })
-        })
-
-        const updateAuthData = await updateAuthResponse.json()
-        console.log('Update auth response:', updateAuthData)
-
-        if (!updateAuthResponse.ok) {
-          console.error('Error updating auth user metadata:', updateAuthData)
-          return new Response(JSON.stringify({ 
-            error: 'Failed to update user metadata',
-            details: updateAuthData.error?.message || 'Failed to update user metadata'
-          }), {
-            status: updateAuthResponse.status,
-            headers: { 
-              'Content-Type': 'application/json',
-              ...corsHeaders
-            },
-          })
-        }
-
-        // Update users table
+        // Only update users table, don't update auth metadata to avoid affecting current user session
         const { error: updateError } = await supabase
           .from('users')
           .update({ 
@@ -189,7 +190,7 @@ serve(async (req) => {
             name: name || existingDbUser.name,
             last_modified: new Date().toISOString()
           })
-          .eq('user_id', existingUser.id)
+          .eq('user_id', validExistingUser.id)
 
         if (updateError) {
           console.error('Error updating user clinic association:', updateError)
@@ -236,7 +237,7 @@ serve(async (req) => {
           message: 'User associated with clinic successfully and invitation sent',
           user: {
             id: existingDbUser.id,
-            user_id: existingUser.id,
+            user_id: validExistingUser.id,
             email,
             clinic_id,
             name: name || existingDbUser.name
@@ -254,9 +255,9 @@ serve(async (req) => {
       const { error: insertError } = await supabase
         .from('users')
         .insert([{
-          user_id: existingUser.id,
+          user_id: validExistingUser.id,
           email,
-          name: name || existingUser.user_metadata?.name || '',
+          name: name || validExistingUser.user_metadata?.name || '',
           clinic_id,
           role: 'user',
           created_at: new Date().toISOString(),
@@ -277,31 +278,6 @@ serve(async (req) => {
         })
       }
 
-      // Update auth metadata
-      const updateAuthResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users/${existingUser.id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${supabaseServiceKey}`,
-          'apikey': supabaseServiceKey,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          user_metadata: {
-            name: name || existingUser.user_metadata?.name || '',
-            clinic_id,
-            clinic_name
-          }
-        })
-      })
-
-      const updateAuthData = await updateAuthResponse.json()
-      console.log('Update auth response:', updateAuthData)
-
-      if (!updateAuthResponse.ok) {
-        console.error('Error updating auth user metadata:', updateAuthData)
-        // Continue anyway since the user record was created
-      }
-
       // Send a new invitation email
       const inviteResponse = await fetch(`${supabaseUrl}/auth/v1/invite`, {
         method: 'POST',
@@ -313,7 +289,7 @@ serve(async (req) => {
         body: JSON.stringify({
           email,
           data: {
-            name: name || existingUser.user_metadata?.name || '',
+            name: name || validExistingUser.user_metadata?.name || '',
             clinic_id,
             clinic_name
           },
@@ -332,10 +308,10 @@ serve(async (req) => {
       return new Response(JSON.stringify({ 
         message: 'User record created successfully and invitation sent',
         user: {
-          user_id: existingUser.id,
+          user_id: validExistingUser.id,
           email,
           clinic_id,
-          name: name || existingUser.user_metadata?.name || ''
+          name: name || validExistingUser.user_metadata?.name || ''
         }
       }), {
         status: 200,
@@ -346,76 +322,10 @@ serve(async (req) => {
       })
     }
 
-    // User doesn't exist - create new user
-    const createResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${supabaseServiceKey}`,
-        'apikey': supabaseServiceKey,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        email,
-        user_metadata: {
-          name: name || '',
-          clinic_id,
-          clinic_name
-        },
-        email_confirm: false
-      })
-    })
-
-    const createData = await createResponse.json()
-    console.log('Create user response:', createData)
-
-    if (!createResponse.ok) {
-      console.error('Error creating auth user:', createData)
-      return new Response(JSON.stringify({ 
-        error: 'Failed to create user',
-        details: createData.error?.message || 'Failed to create user'
-      }), {
-        status: createResponse.status,
-        headers: { 
-          'Content-Type': 'application/json',
-          ...corsHeaders
-        },
-      })
-    }
-
-    if (!createData?.id) {
-      console.error('Invalid user creation response:', createData)
-      return new Response(JSON.stringify({ 
-        error: 'Invalid user creation response',
-        details: 'User was created but response was invalid'
-      }), {
-        status: 500,
-        headers: { 
-          'Content-Type': 'application/json',
-          ...corsHeaders
-        },
-      })
-    }
-
-    // Create corresponding record in users table
-    const { error: insertError } = await supabase
-      .from('users')
-      .insert([{
-        user_id: createData.id,
-        email,
-        name: name || '',
-        clinic_id,
-        role: 'user',
-        created_at: new Date().toISOString(),
-        last_modified: new Date().toISOString()
-      }])
-
-    if (insertError) {
-      console.error('Error creating user record:', insertError)
-      // Don't return error here since the auth user was created successfully
-      // Just log the error and continue
-    }
-
-    // Send invitation email
+    // User doesn't exist in auth - send invitation directly to create user
+    console.log('User does not exist in auth, sending invitation to create user')
+    
+    // Send invitation email first - this will create the user in auth
     const inviteResponse = await fetch(`${supabaseUrl}/auth/v1/invite`, {
       method: 'POST',
       headers: {
@@ -439,27 +349,116 @@ serve(async (req) => {
 
     if (!inviteResponse.ok) {
       console.error('Error sending invitation:', inviteData)
-      // Continue anyway since the user was created successfully
-    }
-
-    return new Response(
-      JSON.stringify({ 
-        message: 'User created and invitation sent successfully', 
-        user: {
-          id: createData.id,
-          email,
-          clinic_id,
-          name: name || ''
-        }
-      }),
-      {
-        status: 200,
+      return new Response(JSON.stringify({ 
+        error: 'Failed to send invitation',
+        details: inviteData.error?.message || 'Failed to send invitation'
+      }), {
+        status: inviteResponse.status,
         headers: { 
           'Content-Type': 'application/json',
           ...corsHeaders
         },
+      })
+    }
+
+    // Now check if the user was created in auth
+    const authCheckResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
+      headers: {
+        'Authorization': `Bearer ${supabaseServiceKey}`,
+        'apikey': supabaseServiceKey
       }
-    )
+    })
+    
+    const authCheckData = await authCheckResponse.json()
+    const createdUser = authCheckData?.users?.[0]
+
+    if (createdUser) {
+      console.log('User created successfully via invitation:', createdUser.id)
+      
+      // Check if email already exists in users table
+      const { data: existingEmailUser, error: emailCheckError } = await supabase
+        .from('users')
+        .select('id, user_id, clinic_id, name')
+        .eq('email', email)
+        .single()
+
+      console.log('Email check in users table after invitation:', {
+        existingEmailUser: !!existingEmailUser,
+        existingEmailUserId: existingEmailUser?.id,
+        existingEmailUserClinicId: existingEmailUser?.clinic_id,
+        emailCheckError: emailCheckError?.message
+      })
+
+      if (existingEmailUser) {
+        // Email already exists in users table - update the existing record
+        console.log('Email exists in users table, updating existing record')
+        
+        const { error: updateError } = await supabase
+          .from('users')
+          .update({ 
+            user_id: createdUser.id, // Update with new auth user ID
+            name: name || existingEmailUser.name,
+            clinic_id,
+            last_modified: new Date().toISOString()
+          })
+          .eq('id', existingEmailUser.id)
+
+        if (updateError) {
+          console.error('Error updating existing user record:', updateError)
+          // Continue anyway since the invitation was sent successfully
+        }
+      } else {
+        // Create new record in users table with the contact data
+        const { error: insertError } = await supabase
+          .from('users')
+          .insert([{
+            user_id: createdUser.id,
+            email,
+            name: name || '',
+            clinic_id,
+            role: 'user',
+            created_at: new Date().toISOString(),
+            last_modified: new Date().toISOString()
+          }])
+
+        if (insertError) {
+          console.error('Error creating user record:', insertError)
+          // Continue anyway since the invitation was sent successfully
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          message: 'User created and invitation sent successfully', 
+          user: {
+            id: createdUser.id,
+            email,
+            clinic_id,
+            name: name || ''
+          }
+        }),
+        {
+          status: 200,
+          headers: { 
+            'Content-Type': 'application/json',
+            ...corsHeaders
+          },
+        }
+      )
+    } else {
+      // User was not created - this might happen if there's an issue with the invitation
+      console.error('User was not created via invitation')
+      return new Response(JSON.stringify({ 
+        error: 'Failed to create user via invitation',
+        details: 'User was not created in auth system'
+      }), {
+        status: 500,
+        headers: { 
+          'Content-Type': 'application/json',
+          ...corsHeaders
+        },
+      })
+    }
   } catch (err) {
     console.error('Unexpected error:', err)
     return new Response(

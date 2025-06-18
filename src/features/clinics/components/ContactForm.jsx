@@ -33,7 +33,7 @@ const contactFormSchema = z.object({
   email: z.string().email("Invalid email address"),
 })
 
-export default function ContactForm({ isOpen, onClose, onSubmit }) {
+export default function ContactForm({ isOpen, onClose, onSubmit, isLoading = false }) {
   const form = useForm({
     resolver: zodResolver(contactFormSchema),
     defaultValues: {
@@ -101,7 +101,9 @@ export default function ContactForm({ isOpen, onClose, onSubmit }) {
 
             <DialogFooter>
               <Button variant="outline" onClick={onClose}>Cancel</Button>
-              <Button type="submit">Add Contact</Button>
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? "Adding..." : "Add Contact"}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

@@ -65,12 +65,10 @@ export default function AdminDashboard() {
     totalPatients: 0,
     totalClinics: 0,
     totalReports: 0,
-    totalRevenue: 0,
     monthlyGrowth: {
       patients: 0,
       clinics: 0,
-      reports: 0,
-      revenue: 0
+      reports: 0
     }
   })
   const [patientTrends, setPatientTrends] = useState([])
@@ -92,6 +90,9 @@ export default function AdminDashboard() {
     systemUpdates: 0,
     activeUsers: 0
   })
+  const [patientHistogram, setPatientHistogram] = useState([])
+  const [reportsPerClinic, setReportsPerClinic] = useState([])
+  const [reportCreationTrend, setReportCreationTrend] = useState([])
 
   useEffect(() => {
     if (user) {
@@ -178,6 +179,22 @@ export default function AdminDashboard() {
 
       console.log('Patient trends data for chart:', patientTrendsData)
 
+      // Histogram for patient registrations (last 12 months)
+      const months = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date()
+        d.setMonth(d.getMonth() - (11 - i))
+        return d.toLocaleString('default', { month: 'short', year: '2-digit' })
+      })
+      const patientHistogramData = months.map(monthLabel => ({
+        month: monthLabel,
+        count: patientData?.filter(patient => {
+          const d = new Date(patient.created_at)
+          const label = d.toLocaleString('default', { month: 'short', year: '2-digit' })
+          return label === monthLabel
+        }).length || 0
+      }))
+      setPatientHistogram(patientHistogramData)
+
       // Fetch clinic performance with more details
       const { data: clinicData, error: clinicError } = await supabase
         .from('clinics')
@@ -202,17 +219,14 @@ export default function AdminDashboard() {
       const clinicPerformanceData = clinicData?.map(clinic => {
         const reports = clinic.reports || []
         const completedReports = reports.filter(r => r.status === 'Completed').length
-        const totalRevenue = reports.length * 100 // Assuming $100 per report
         const completionRate = reports.length ? (completedReports / reports.length) * 100 : 0
-
         return {
           name: clinic.name,
           logo: clinic.logo_url,
           patients: reports.length,
-          revenue: totalRevenue,
           completionRate
         }
-      }).sort((a, b) => b.revenue - a.revenue)
+      }).sort((a, b) => b.patients - a.patients)
 
       console.log('Processed clinic performance data:', clinicPerformanceData)
 
@@ -232,6 +246,25 @@ export default function AdminDashboard() {
       }))
 
       console.log('Report stats data for pie chart:', reportStatsData)
+
+      // Bar chart for reports per clinic
+      const reportsPerClinicData = (clinicData || []).map(clinic => ({
+        name: clinic.name,
+        reports: clinic.reports.length
+      }))
+      setReportsPerClinic(reportsPerClinicData)
+
+      // Line chart for report creation trend (last 12 months)
+      const reportMonths = months
+      const reportCreationTrendData = reportMonths.map(monthLabel => ({
+        month: monthLabel,
+        count: reportsData?.filter(report => {
+          const d = new Date(report.created_at)
+          const label = d.toLocaleString('default', { month: 'short', year: '2-digit' })
+          return label === monthLabel
+        }).length || 0
+      }))
+      setReportCreationTrend(reportCreationTrendData)
 
       // Fetch recent activity with more details
       const { data: recentReports, error: recentError } = await supabase
@@ -263,12 +296,10 @@ export default function AdminDashboard() {
         totalPatients: patientsCount || 0,
         totalClinics: clinicsCount || 0,
         totalReports: reportsCount || 0,
-        totalRevenue: (reportsCount || 0) * 100,
         monthlyGrowth: {
           patients: calculateGrowth(patientsData),
           clinics: calculateGrowth(clinicsData),
-          reports: calculateGrowth(reportsData),
-          revenue: calculateGrowth(reportsData)
+          reports: calculateGrowth(reportsData)
         }
       })
       setPatientTrends(patientTrendsData)
@@ -414,7 +445,7 @@ export default function AdminDashboard() {
               </header>
 
               {/* Quick Stats Row */}
-              <div className="grid gap-4 md:grid-cols-4">
+              {/* <div className="grid gap-4 md:grid-cols-4">
                 <Card className="bg-blue-50 dark:bg-blue-950">
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">System Health</CardTitle>
@@ -463,7 +494,7 @@ export default function AdminDashboard() {
                     <p className="text-xs text-muted-foreground">Need immediate action</p>
                   </CardContent>
                 </Card>
-              </div>
+              </div> */}
 
               {/* Quick Actions */}
               {/* <div className="grid gap-4 md:grid-cols-6">
@@ -540,23 +571,6 @@ export default function AdminDashboard() {
                       <span className={getGrowthColor(stats.monthlyGrowth.reports)}>
                         {getGrowthIcon(stats.monthlyGrowth.reports)}
                         {Math.abs(stats.monthlyGrowth.reports).toFixed(1)}%
-                      </span>
-                      <span className="ml-1">from last month</span>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Revenue</CardTitle>
-                    <IconCalendarStats className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">${stats.totalRevenue.toLocaleString()}</div>
-                    <div className="flex items-center text-xs text-muted-foreground">
-                      <span className={getGrowthColor(stats.monthlyGrowth.revenue)}>
-                        {getGrowthIcon(stats.monthlyGrowth.revenue)}
-                        {Math.abs(stats.monthlyGrowth.revenue).toFixed(1)}%
                       </span>
                       <span className="ml-1">from last month</span>
                     </div>
@@ -681,7 +695,7 @@ export default function AdminDashboard() {
                     <Card>
                       <CardHeader>
                         <CardTitle>Top Performing Clinics</CardTitle>
-                        <CardDescription>Based on revenue and completion rate</CardDescription>
+                        <CardDescription>Based on completion rate and report volume</CardDescription>
                       </CardHeader>
                       <CardContent>
                         <ScrollArea className="h-[300px]">
@@ -703,8 +717,7 @@ export default function AdminDashboard() {
                                     </div>
                                   </div>
                                   <div className="text-right">
-                                    <p className="text-sm font-medium">${clinic.revenue.toLocaleString()}</p>
-                                    <p className="text-xs text-muted-foreground">{clinic.patients} patients</p>
+                                    <p className="text-sm font-medium">{clinic.patients} reports</p>
                                   </div>
                                 </div>
                               ))
@@ -759,6 +772,90 @@ export default function AdminDashboard() {
                             )}
                           </div>
                         </ScrollArea>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {/* Patient Registrations Histogram */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Patient Registrations (Histogram)</CardTitle>
+                        <CardDescription>Registrations per month (last 12 months)</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[300px]">
+                          {patientHistogram && patientHistogram.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={patientHistogram}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} />
+                                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                                <Tooltip content={<ChartTooltipContent />} />
+                                <Bar dataKey="count" fill="#8884d8" radius={[4, 4, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="flex items-center justify-center h-full">
+                              <p className="text-muted-foreground">No data available</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    {/* Reports per Clinic Bar Chart */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Reports per Clinic</CardTitle>
+                        <CardDescription>Number of reports by clinic</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[300px]">
+                          {reportsPerClinic && reportsPerClinic.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={reportsPerClinic} layout="vertical">
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis type="number" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                                <YAxis dataKey="name" type="category" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} width={120} />
+                                <Tooltip content={<ChartTooltipContent />} />
+                                <Bar dataKey="reports" fill="#00C49F" radius={[0, 4, 4, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="flex items-center justify-center h-full">
+                              <p className="text-muted-foreground">No data available</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-1">
+                    {/* Report Creation Trend Line Chart */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Report Creation Trend</CardTitle>
+                        <CardDescription>Reports created per month (last 12 months)</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-[300px]">
+                          {reportCreationTrend && reportCreationTrend.length > 0 ? (
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart data={reportCreationTrend}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="month" tick={{ fontSize: 12 }} tickLine={false} />
+                                <YAxis tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
+                                <Tooltip content={<ChartTooltipContent />} />
+                                <Line type="monotone" dataKey="count" stroke="#FF8042" strokeWidth={2} dot={{ r: 4 }} />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          ) : (
+                            <div className="flex items-center justify-center h-full">
+                              <p className="text-muted-foreground">No data available</p>
+                            </div>
+                          )}
+                        </div>
                       </CardContent>
                     </Card>
                   </div>
